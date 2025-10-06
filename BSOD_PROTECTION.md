@@ -6,7 +6,7 @@ The SSAPT kernel driver implements comprehensive Blue Screen of Death (BSOD) pro
 
 ## Error Checking Summary
 
-### ✅ All 7 Kernel Hooks Protected
+### ✅ All 10 Kernel Hooks Protected
 
 Every kernel hook function includes multiple layers of protection:
 
@@ -19,6 +19,9 @@ Every kernel hook function includes multiple layers of protection:
 | `HookedNtUserGetDC` | ✅ | ✅ | ✅ | ✅ |
 | `HookedNtUserGetWindowDC` | ✅ | ✅ | ✅ | ✅ |
 | `HookedNtGdiGetDIBitsInternal` | ✅ | ✅ | ✅ | ✅ |
+| `HookedNtGdiCreateCompatibleDC` | ✅ | ✅ | ✅ | ✅ |
+| `HookedNtGdiCreateCompatibleBitmap` | ✅ | ✅ | ✅ | ✅ |
+| `HookedNtUserPrintWindow` | ✅ | ✅ | ✅ | ✅ |
 
 ## Protection Mechanisms
 
@@ -39,7 +42,7 @@ NTSTATUS HookedNtGdiBitBlt(...) {
 ```
 
 **Protected Functions:**
-- All 7 hook functions
+- All 10 hook functions
 - `DriverEntry`
 - `DriverUnload`
 - `DeviceCreate`
@@ -302,7 +305,7 @@ All hooks log their activity:
 ```
 [SSAPT] Driver loading...
 [SSAPT] Initializing kernel hooks
-[SSAPT] Kernel hooks initialized (7 hooks ready)
+[SSAPT] Kernel hooks initialized (10 hooks ready)
 [SSAPT]   - NtGdiDdDDIPresent (monitoring)
 [SSAPT]   - NtGdiDdDDIGetDisplayModeList (blocking)
 [SSAPT]   - NtGdiBitBlt (blocking large transfers)
@@ -310,6 +313,9 @@ All hooks log their activity:
 [SSAPT]   - NtUserGetDC (monitoring)
 [SSAPT]   - NtUserGetWindowDC (monitoring)
 [SSAPT]   - NtGdiGetDIBitsInternal (blocking pixel reads)
+[SSAPT]   - NtGdiCreateCompatibleDC (monitoring)
+[SSAPT]   - NtGdiCreateCompatibleBitmap (monitoring)
+[SSAPT]   - NtUserPrintWindow (blocking)
 [SSAPT] Driver loaded successfully
 ```
 

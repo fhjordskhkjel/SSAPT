@@ -40,7 +40,7 @@
 │  │                │                                     │   │
 │  │                ▼                                     │   │
 │  │  ┌──────────────────────────────────────────────┐   │   │
-│  │  │   Kernel Hook Interceptors (7 hooks)         │   │   │
+│  │  │   Kernel Hook Interceptors (10 hooks)        │   │   │
 │  │  │   • NtGdiDdDDIPresent → Monitored            │   │   │
 │  │  │   • NtGdiDdDDIGetDisplayModeList → Blocked   │   │   │
 │  │  │   • NtGdiBitBlt → Blocked (large ops)        │   │   │
@@ -48,6 +48,9 @@
 │  │  │   • NtUserGetDC → Monitored                  │   │   │
 │  │  │   • NtUserGetWindowDC → Monitored            │   │   │
 │  │  │   • NtGdiGetDIBitsInternal → Blocked (reads) │   │   │
+│  │  │   • NtGdiCreateCompatibleDC → Monitored      │   │   │
+│  │  │   • NtGdiCreateCompatibleBitmap → Monitored  │   │   │
+│  │  │   • NtUserPrintWindow → Blocked              │   │   │
 │  │  └─────────────┬────────────────────────────────┘   │   │
 │  └────────────────┼──────────────────────────────────────┘   │
 │                   │                                          │
@@ -208,7 +211,7 @@ Release spin lock
     │
     └─[if FALSE or small op]─→ Call original → Return result
 
-Note: 7 hooks now in place:
+Note: 10 hooks now in place:
   - NtGdiDdDDIPresent (monitoring)
   - NtGdiDdDDIGetDisplayModeList (blocking)
   - NtGdiBitBlt (blocking large transfers >100px)
@@ -216,6 +219,9 @@ Note: 7 hooks now in place:
   - NtUserGetDC (monitoring)
   - NtUserGetWindowDC (monitoring)
   - NtGdiGetDIBitsInternal (blocking pixel reads)
+  - NtGdiCreateCompatibleDC (monitoring)
+  - NtGdiCreateCompatibleBitmap (monitoring)
+  - NtUserPrintWindow (blocking)
 ```
 
 ## Data Flow
