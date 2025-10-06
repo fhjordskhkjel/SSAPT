@@ -1,0 +1,17 @@
+TARGETNAME=ssapt
+TARGETTYPE=DRIVER
+DRIVERTYPE=WDM
+
+SOURCES=kernel_driver.c
+
+TARGETLIBS=$(DDK_LIB_PATH)\ntoskrnl.lib \
+           $(DDK_LIB_PATH)\hal.lib \
+           $(DDK_LIB_PATH)\wdmsec.lib
+
+INCLUDES=$(DDK_INC_PATH)
+
+# Enable buffer security checks
+BUFFER_OVERFLOW_CHECKS=1
+
+# Set subsystem version
+_NT_TARGET_VERSION=$(_NT_TARGET_VERSION_WIN7)

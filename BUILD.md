@@ -2,15 +2,17 @@
 
 ## Prerequisites
 
-- Windows 10 or later
+- Windows 10 or later (Windows 11 recommended)
 - Visual Studio 2019 or later with C++ development tools
-- CMake 3.10 or later
-- Windows SDK (for DirectX headers)
-- Microsoft Detours library (optional, for IAT hooking)
+- **Windows Driver Kit (WDK)** - Required for kernel driver
+- CMake 3.10 or later (for control application)
+- Administrator privileges
 
 ## Build Instructions
 
-### Using CMake (Recommended)
+### Part 1: Build the Control Application (User-Mode)
+
+The control application is built using CMake:
 
 1. Create a build directory:
 ```bash
@@ -29,81 +31,169 @@ cmake --build . --config Release
 ```
 
 The output will be:
-- `ssapt.dll` - The main driver library
-- `ssapt_test.exe` - Test executable
+- `ssapt.exe` - The control application
 
-### Using Visual Studio
+### Part 2: Build the Kernel Driver
 
-1. Open Visual Studio
-2. Select "Open a local folder" and choose the SSAPT directory
-3. CMake integration will automatically configure the project
-4. Build using Ctrl+Shift+B or Build menu
+The kernel driver requires the Windows Driver Kit (WDK).
 
-## Manual Build (without CMake)
+#### Option A: Using Visual Studio with WDK Integration
 
-If you prefer to build manually:
+1. Install WDK (download from Microsoft)
+2. Open Visual Studio
+3. File → New → Project → Kernel Mode Driver, Empty (KMDF)
+4. Add `kernel_driver.c` to the project
+5. Set project properties:
+   - Configuration Type: Driver
+   - Driver Type: WDM
+6. Build the solution (Ctrl+Shift+B)
 
-```bash
-cl /LD /EHsc /std:c++17 driver.cpp dx_hooks.cpp /link gdi32.lib d3d9.lib d3d11.lib dxgi.lib /OUT:ssapt.dll
-cl /EHsc /std:c++17 test_driver.cpp /link gdi32.lib ssapt.lib /OUT:ssapt_test.exe
+The output will be:
+- `ssapt.sys` - The kernel driver
+- `ssapt.inf` - Driver installation file
+
+#### Option B: Using WDK Build Environment
+
+1. Open a WDK command prompt (as Administrator)
+2. Navigate to the SSAPT directory
+3. Run the build command:
+```cmd
+build -ceZ
 ```
 
-## Testing
-
-After building, run the test executable:
-
-```bash
-cd build
-.\ssapt_test.exe
+Or use the legacy build system:
+```cmd
+cd /d C:\path\to\SSAPT
+set DRIVER_NAME=ssapt
+msbuild ssapt.vcxproj /p:Configuration=Release /p:Platform=x64
 ```
-
-The test will attempt to take screenshots with blocking enabled and disabled, verifying that the driver works correctly.
 
 ## Installation
 
-To use the driver in your own applications:
+### Step 1: Enable Test Signing (Development Only)
 
-1. Copy `ssapt.dll` to your application directory
-2. Include `driver.h` in your source code
-3. Link against `ssapt.lib` (or load the DLL dynamically)
+For development/testing without a signed driver:
 
-## Usage Example
+```cmd
+bcdedit /set testsigning on
+```
 
-```cpp
-#include "driver.h"
+**Reboot your computer** after enabling test signing.
 
-int main() {
-    // Enable screenshot blocking
-    EnableBlocking();
-    
-    // Your code here - screenshots will be blocked
-    
-    // Disable blocking when done
-    DisableBlocking();
-    
-    return 0;
-}
+### Step 2: Install the Kernel Driver
+
+Run as Administrator:
+
+```cmd
+driver_manager.bat install
+driver_manager.bat start
+```
+
+Verify the driver is running:
+```cmd
+driver_manager.bat status
+```
+
+### Step 3: Test the Control Application
+
+```cmd
+ssapt.exe status
+ssapt.exe enable
+ssapt.exe disable
+```
+
+## Usage
+
+### Enable Screenshot Blocking
+
+```cmd
+ssapt.exe enable
+```
+
+### Disable Screenshot Blocking
+
+```cmd
+ssapt.exe disable
+```
+
+### Check Current Status
+
+```cmd
+ssapt.exe status
+```
+
+### Stop and Uninstall
+
+```cmd
+driver_manager.bat stop
+driver_manager.bat uninstall
 ```
 
 ## Troubleshooting
 
 ### Build Errors
 
-- **Missing DirectX headers**: Install the Windows SDK
-- **Detours not found**: The driver works without Detours but uses vtable hooking instead
-- **Linker errors**: Ensure you're linking against the required libraries (gdi32, d3d9, d3d11, dxgi)
+**Control Application:**
+- **CMake not found**: Install CMake and add to PATH
+- **Compiler not found**: Install Visual Studio with C++ tools
+- **Link errors**: Ensure Windows SDK is installed
+
+**Kernel Driver:**
+- **WDK not found**: Install Windows Driver Kit from Microsoft
+- **Build tools missing**: Install WDK along with Visual Studio
+- **Target platform errors**: Check WDK version matches your Windows version
+
+### Installation Issues
+
+- **Driver installation fails**: Run `driver_manager.bat` as Administrator
+- **Test signing error**: Enable test signing with `bcdedit /set testsigning on` and reboot
+- **Access denied**: Ensure you have Administrator privileges
+- **Driver won't load**: Check Windows Event Viewer for detailed error messages
 
 ### Runtime Issues
 
-- **Hooks not working**: Run the application with administrator privileges
-- **Access denied**: Some antivirus software may flag the driver - add an exception if needed
-- **DirectX hooks not applied**: The driver hooks DirectX at runtime and may not catch all applications
+- **Control app can't connect**: Ensure the driver is installed and running
+  ```cmd
+  driver_manager.bat status
+  ```
+- **Commands not working**: Check driver logs in DebugView or Event Viewer
+- **System instability**: Stop the driver immediately:
+  ```cmd
+  driver_manager.bat stop
+  ```
+
+## Debug Tools
+
+### DebugView
+
+Download DebugView from Microsoft Sysinternals to see kernel debug output:
+
+1. Run DebugView as Administrator
+2. Enable "Capture Kernel" in the Capture menu
+3. Watch for `[SSAPT]` tagged messages
+
+### Event Viewer
+
+Check Windows Event Viewer for driver events:
+1. Open Event Viewer (eventvwr.msc)
+2. Navigate to Windows Logs → System
+3. Filter by source "SSAPT" or look for Service Control Manager events
 
 ## Notes
 
-- This driver is designed for testing and educational purposes
-- Administrator privileges may be required for some hooking methods
-- The driver hooks at the application level with kernel-level safety checks
-- All hook functions include structured exception handling (SEH) to prevent system crashes
-- Memory operations are validated before execution to ensure stability
-- Some screenshot tools may use alternative methods not covered by these hooks
+- **Development Only**: This driver is for testing and research purposes
+- **Test Signing**: Required for unsigned drivers during development
+- **Administrator Rights**: Required for all driver operations
+- **Kernel Safety**: All operations include proper error handling
+- **System Stability**: The driver includes safety checks to prevent crashes
+- **Compatibility**: Designed for Windows 10/11 x64 systems
+
+## Production Deployment
+
+For production use:
+
+1. **Sign the driver** with a valid code signing certificate
+2. Submit to Microsoft for attestation signing
+3. Disable test signing mode
+4. Use proper installation package (MSI/INF)
+5. Include proper version information and digital signatures

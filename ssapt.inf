@@ -1,0 +1,43 @@
+;
+; SSAPT Kernel Driver Installation File
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%ManufacturerName%
+DriverVer=01/01/2024,1.0.0.0
+CatalogFile=ssapt.cat
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+ssapt.sys = 1,,
+
+[DefaultInstall]
+CopyFiles=DriverCopyFiles
+
+[DefaultInstall.Services]
+AddService=SSAPT,%SPSVCINST_ASSOCSERVICE%,SSAPT_Service_Inst
+
+[DriverCopyFiles]
+ssapt.sys
+
+[SSAPT_Service_Inst]
+DisplayName=%ServiceDesc%
+ServiceType=1               ; SERVICE_KERNEL_DRIVER
+StartType=3                 ; SERVICE_DEMAND_START
+ErrorControl=1              ; SERVICE_ERROR_NORMAL
+ServiceBinary=%12%\ssapt.sys
+LoadOrderGroup=Extended Base
+
+[Strings]
+SPSVCINST_ASSOCSERVICE=0x00000002
+ManufacturerName="SSAPT Project"
+DiskName="SSAPT Installation Disk"
+ServiceDesc="SSAPT Screenshot Protection Driver"

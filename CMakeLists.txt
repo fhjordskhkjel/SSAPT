@@ -1,66 +1,28 @@
 cmake_minimum_required(VERSION 3.10)
-project(SSAPT VERSION 1.0.0 LANGUAGES CXX)
+project(SSAPT VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Main driver library
-add_library(ssapt_driver SHARED
-    driver.cpp
-    dx_hooks.cpp
-    driver.h
-)
-
-# Link against required Windows libraries
-target_link_libraries(ssapt_driver PRIVATE
-    gdi32
-    d3d9
-    d3d11
-    dxgi
+# Control application (replaces DLL-based control)
+add_executable(ssapt_control
+    control_app.cpp
 )
 
 # Set output name
-set_target_properties(ssapt_driver PROPERTIES
+set_target_properties(ssapt_control PROPERTIES
     OUTPUT_NAME "ssapt"
-    PREFIX ""
-)
-
-# Test executable
-add_executable(ssapt_test
-    test_driver.cpp
-)
-
-target_link_libraries(ssapt_test PRIVATE
-    ssapt_driver
-    gdi32
-)
-
-# Example application
-add_executable(ssapt_example
-    example.cpp
-)
-
-target_link_libraries(ssapt_example PRIVATE
-    ssapt_driver
-    gdi32
-)
-
-# Safety test executable
-add_executable(ssapt_safety_test
-    test_safety.cpp
-)
-
-target_link_libraries(ssapt_safety_test PRIVATE
-    ssapt_driver
-    gdi32
 )
 
 # Installation
-install(TARGETS ssapt_driver
-    LIBRARY DESTINATION lib
+install(TARGETS ssapt_control
     RUNTIME DESTINATION bin
 )
 
-install(FILES driver.h
-    DESTINATION include
-)
+# Note: Kernel driver (ssapt.sys) must be built using Windows Driver Kit (WDK)
+# Use the 'sources' file with the WDK build environment
+# Or use Visual Studio with WDK integration
+
+message(STATUS "Building SSAPT Control Application")
+message(STATUS "Kernel driver must be built separately using WDK")
+message(STATUS "See BUILD.md for detailed instructions")
