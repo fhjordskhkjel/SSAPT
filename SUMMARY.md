@@ -2,71 +2,71 @@
 
 ## Overview
 
-SSAPT (Screenshot Anti-Protection Testing) is a Windows driver that blocks screenshots by hooking into GDI and DirectX rendering paths and blocking access to frame buffers. This implementation provides comprehensive protection against common screenshot capture methods.
+SSAPT (Screenshot Anti-Protection Testing) is a Windows **kernel-mode driver** that provides **system-wide screenshot blocking** by intercepting graphics operations at the kernel level. Unlike user-mode solutions, SSAPT operates in kernel space for comprehensive protection across all processes.
 
 ## Implementation Completed
 
 ### Core Components
 
-1. **driver.cpp** (195 lines)
-   - Main driver implementation
-   - GDI function hooking (BitBlt, GetDIBits, CreateCompatibleDC, CreateCompatibleBitmap)
-   - Driver initialization and cleanup
-   - DLL entry point
-   - Exported API functions
+1. **kernel_driver.c** (~300 lines)
+   - Kernel-mode driver implementation
+   - Driver entry point (DriverEntry)
+   - Device object and symbolic link creation
+   - IOCTL request handling (IRP_MJ_DEVICE_CONTROL)
+   - Kernel graphics API hooking infrastructure
+   - Thread-safe state management with spin locks
+   - Structured exception handling for kernel safety
 
-2. **dx_hooks.cpp** (264 lines)
-   - DirectX vtable hooking implementation
-   - DirectX 9 hook functions (Present, GetFrontBufferData)
-   - DirectX 11/DXGI hook functions (Present, GetBuffer)
-   - Temporary device creation for vtable extraction
-   - Memory protection management
+2. **control_app.cpp** (~200 lines)
+   - User-mode control application
+   - Command-line interface (enable/disable/status/help)
+   - IOCTL communication with kernel driver
+   - Device handle management
+   - Error handling and user feedback
 
-3. **driver.h** (20 lines)
-   - Public API header
-   - Exported function declarations
-   - C linkage for FFI compatibility
+3. **driver_manager.bat** (~80 lines)
+   - Driver installation script
+   - Service control (install/start/stop/uninstall/status)
+   - Requires Administrator privileges
+   - Windows Service Control Manager integration
 
-### Test and Example Code
+### Build and Installation Files
 
-4. **test_driver.cpp** (113 lines)
-   - Comprehensive test suite
-   - GDI screenshot testing
-   - Frame buffer access testing
-   - Enable/disable functionality testing
-   - Test result reporting
+4. **ssapt.inf** (~45 lines)
+   - Windows driver installation file
+   - Service configuration
+   - Device installation directives
+   - Compatible with pnputil and Device Manager
 
-5. **example.cpp** (165 lines)
-   - Interactive demonstration application
-   - Multiple usage scenarios
-   - Manual control mode
-   - Real-world use case examples
+5. **sources** (~15 lines)
+   - WDK build configuration
+   - Target name and type
+   - Linker dependencies
+   - Security flags
 
 ### Build System
 
-6. **CMakeLists.txt** (41 lines)
-   - Cross-platform build configuration
-   - Library and executable targets
-   - Dependency linking
-   - Installation rules
+6. **CMakeLists.txt** (~30 lines)
+   - User-mode control application build
+   - CMake 3.10+ configuration
+   - Cross-compilation support
+   - Installation targets
 
-7. **Makefile** (15 lines)
-   - Alternative manual build system
-   - Visual Studio compiler support
-   - Clean targets
-
-8. **.gitignore** (28 lines)
+7. **.gitignore** (~60 lines)
    - Build artifact exclusions
+   - Kernel driver build outputs
+   - WDK intermediate files
    - IDE configuration exclusions
-   - Platform-specific file exclusions
 
-### Utilities
+### Deprecated Files
 
-9. **inject.py** (143 lines)
-   - DLL injection script
-   - Process targeting
-   - Administrator privilege checking
-   - Windows API integration
+8. ***.deprecated** (preserved for reference)
+   - driver.cpp.deprecated - Old user-mode DLL implementation
+   - dx_hooks.cpp.deprecated - DirectX vtable hooking code
+   - driver.h.deprecated - Old DLL API header
+   - example.cpp.deprecated - Old example application
+   - test_driver.cpp.deprecated - Old test suite
+   - inject.py.deprecated - Old DLL injection script
 
 ### Documentation
 
@@ -198,22 +198,22 @@ The driver uses vtable manipulation to hook COM interface methods:
 
 ```
 SSAPT/
-├── driver.cpp              # Main driver implementation
-├── dx_hooks.cpp           # DirectX hooking implementation
-├── driver.h               # Public API header
-├── test_driver.cpp        # Test suite
-├── example.cpp            # Example application
-├── inject.py              # DLL injection script
-├── CMakeLists.txt         # CMake build configuration
-├── Makefile               # Manual build configuration
+├── kernel_driver.c         # Kernel-mode driver (ssapt.sys)
+├── control_app.cpp        # Control application (ssapt.exe)
+├── driver_manager.bat     # Driver management script
+├── ssapt.inf              # Driver installation file
+├── sources                # WDK build configuration
+├── CMakeLists.txt         # CMake build (control app)
 ├── .gitignore             # Git exclusions
 ├── README.md              # Project overview
 ├── BUILD.md               # Build instructions
 ├── USAGE.md               # Usage guide
+├── ARCHITECTURE.md        # Architecture documentation
 ├── TECHNICAL.md           # Technical documentation
 ├── SECURITY.md            # Security policy
 ├── LICENSE                # MIT License
-└── SUMMARY.md             # This file
+├── SUMMARY.md             # This file
+└── *.deprecated           # Old user-mode DLL files (preserved)
 ```
 
 ## Statistics
@@ -281,6 +281,44 @@ This implementation is designed for:
 
 Users must comply with all applicable laws and regulations.
 
+## Key Changes from Previous Version
+
+### Architecture Migration
+- **From:** User-mode DLL with per-process injection
+- **To:** Kernel-mode driver with system-wide protection
+
+### Control Method
+- **From:** DLL exports (EnableBlocking/DisableBlocking functions)
+- **To:** Standalone command-line application with IOCTL interface
+
+### Protection Scope
+- **From:** Single process (requires DLL injection per process)
+- **To:** System-wide (affects all processes)
+
+### Hook Level
+- **From:** User-mode API hooking (GDI/DirectX)
+- **To:** Kernel-mode graphics API interception
+
+### Advantages
+- ✅ System-wide protection without per-process overhead
+- ✅ Stronger security (kernel-level enforcement)
+- ✅ Simpler deployment (no DLL injection needed)
+- ✅ Centralized control via command-line tool
+- ✅ Works across all processes automatically
+
+### Requirements
+- ⚠️ Requires Windows Driver Kit (WDK) to build
+- ⚠️ Must be installed with Administrator privileges
+- ⚠️ Requires driver signing (or test signing mode)
+- ⚠️ More complex development and testing
+
 ## Conclusion
 
-The SSAPT implementation provides a comprehensive solution for blocking screenshots through GDI and DirectX API hooking. The driver successfully intercepts common screenshot capture methods and provides an easy-to-use API for runtime control. Extensive documentation ensures that users can build, test, and integrate the driver effectively.
+The SSAPT implementation now provides **kernel-mode system-wide screenshot blocking** through a proper Windows kernel driver. The solution includes:
+
+1. **Kernel driver (ssapt.sys)** - Core blocking functionality in kernel space
+2. **Control application (ssapt.exe)** - Easy-to-use command-line interface
+3. **Management tools** - Installation and service control scripts
+4. **Complete documentation** - Build, usage, and technical guides
+
+This architecture provides stronger protection than user-mode solutions and eliminates the need for DLL injection, making it more suitable for system-wide deployment scenarios.

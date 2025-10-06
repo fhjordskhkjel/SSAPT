@@ -10,6 +10,15 @@ build/
 *.so
 *.dylib
 
+# Kernel driver build artifacts
+*.sys
+*.pdb
+*.inf
+!ssapt.inf
+*.cat
+objfre_*/
+objchk_*/
+
 # CMake
 CMakeCache.txt
 CMakeFiles/
@@ -24,6 +33,15 @@ cmake_install.cmake
 *.vcxproj.user
 *.sln
 out/
+x64/
+Debug/
+Release/
+
+# WDK Build
+amd64/
+i386/
+arm/
+arm64/
 
 # IDE
 .vscode/
