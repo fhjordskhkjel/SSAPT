@@ -1,0 +1,40 @@
+# Build artifacts
+build/
+*.dll
+*.exe
+*.lib
+*.exp
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.cmake
+!CMakeLists.txt
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+out/
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# Windows
+Thumbs.db
+Desktop.ini
