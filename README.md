@@ -24,6 +24,9 @@ SSAPT is a lightweight DLL-based driver that intercepts common screenshot captur
 - ✅ Minimal performance overhead
 - ✅ Easy integration via DLL
 - ✅ Comprehensive test suite
+- ✅ **Kernel-level safety checks** to prevent system crashes (BSODs)
+- ✅ **Structured exception handling** in all hook functions
+- ✅ **Memory validation** before all pointer operations
 
 ## Quick Start
 
@@ -106,10 +109,22 @@ All functions are exported with C linkage for easy FFI integration.
 
 ## Limitations
 
-- Application-level hooking only (not kernel-level)
+- Application-level hooking with kernel-level safety protections
 - May not block all screenshot methods (e.g., hardware capture cards)
 - Requires the DLL to be loaded in the target process
 - Some antivirus software may flag hooking behavior
+
+## Safety and Stability
+
+The driver includes comprehensive safety measures:
+
+- **Structured Exception Handling (SEH)**: All hooks protected with `__try/__except`
+- **Memory Validation**: Pointer validation before all memory operations
+- **Bounds Checking**: Vtable indices and array access validated
+- **Null Pointer Checks**: All pointers validated before use
+- **Graceful Error Handling**: Failures return error codes without crashing
+
+These protections ensure the driver cannot cause system crashes or BSODs even if unexpected errors occur.
 
 ## Use Cases
 

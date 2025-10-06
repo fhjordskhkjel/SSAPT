@@ -42,6 +42,19 @@ SSAPT can be bypassed through several methods:
 - May conflict with overlays (Discord, OBS, etc.)
 - Performance impact on graphics-intensive applications
 
+### Safety and Stability Features
+
+SSAPT implements comprehensive safety measures to prevent system instability:
+
+- **Structured Exception Handling (SEH)**: All hooks and critical functions protected
+- **Memory Validation**: Uses `VirtualQuery()` to validate memory before access
+- **Pointer Validation**: All pointers checked for null and validity before use
+- **Bounds Checking**: Array indices and vtable operations validated
+- **Graceful Error Handling**: Failures return error codes without crashing
+- **BSOD Prevention**: Multiple layers of protection prevent system crashes
+
+These protections ensure the driver cannot cause Blue Screen of Death (BSOD) or system crashes even under unexpected error conditions.
+
 ## Vulnerability Reporting
 
 If you discover a security vulnerability in SSAPT:

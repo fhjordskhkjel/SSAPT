@@ -103,5 +103,7 @@ int main() {
 
 - This driver is designed for testing and educational purposes
 - Administrator privileges may be required for some hooking methods
-- The driver hooks at the application level, not kernel level
+- The driver hooks at the application level with kernel-level safety checks
+- All hook functions include structured exception handling (SEH) to prevent system crashes
+- Memory operations are validated before execution to ensure stability
 - Some screenshot tools may use alternative methods not covered by these hooks
