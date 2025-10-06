@@ -1,0 +1,43 @@
+MIT License
+
+Copyright (c) 2024 SSAPT Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+DISCLAIMER: This software is provided for testing and educational purposes only.
+The authors and contributors are not responsible for any misuse of this software.
+Use of this software to circumvent security measures, violate terms of service,
+or engage in unauthorized activities is strictly prohibited and may be illegal
+in your jurisdiction.
+
+This software should only be used for:
+- Security research and testing in authorized environments
+- Educational purposes to understand Windows graphics APIs
+- Testing screenshot protection mechanisms in your own applications
+- Private testing with proper authorization
+
+Any use of this software for malicious purposes, including but not limited to:
+- Circumventing DRM or copy protection systems without authorization
+- Violating terms of service of third-party applications or services
+- Unauthorized access to protected content
+- Any illegal activities
+
+is strictly forbidden and the responsibility lies solely with the user.
