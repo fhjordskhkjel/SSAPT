@@ -45,6 +45,16 @@ target_link_libraries(ssapt_example PRIVATE
     gdi32
 )
 
+# Safety test executable
+add_executable(ssapt_safety_test
+    test_safety.cpp
+)
+
+target_link_libraries(ssapt_safety_test PRIVATE
+    ssapt_driver
+    gdi32
+)
+
 # Installation
 install(TARGETS ssapt_driver
     LIBRARY DESTINATION lib
