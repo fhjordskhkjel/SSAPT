@@ -1,32 +1,43 @@
 # SSAPT - Screenshot Anti-Protection Testing
 
-A Windows driver for private testing that blocks screenshots by hooking into GDI and DirectX rendering paths and blocking access to frame buffers.
+A Windows kernel-mode driver for system-wide screenshot blocking that hooks into kernel graphics APIs.
 
 ## Overview
 
-SSAPT is a lightweight DLL-based driver that intercepts common screenshot capture methods on Windows systems. It works by hooking into:
+SSAPT is a kernel-mode driver that provides system-wide screenshot protection by intercepting screenshot capture methods at the kernel level. Unlike user-mode solutions, this driver operates at the kernel level for comprehensive protection.
 
-1. **GDI (Graphics Device Interface)** rendering paths
-   - BitBlt operations
-   - GetDIBits frame buffer access
-   - Compatible DC and bitmap creation
+**Key Features:**
 
-2. **DirectX rendering paths**
-   - DirectX 9 Present and GetFrontBufferData
-   - DirectX 11/DXGI Present and GetBuffer
-   - Frame buffer access blocking
+1. **Kernel-mode hooking** for system-wide protection
+2. **User-mode control application** for easy management
+3. **No DLL injection required** - works system-wide
+4. **IOCTL-based communication** between user-mode and kernel
+
+## Architecture
+
+```
+User Mode:
+  ssapt.exe (Control Application)
+       |
+       | IOCTL Commands
+       ▼
+Kernel Mode:
+  ssapt.sys (Kernel Driver)
+       |
+       | Hooks kernel graphics APIs
+       ▼
+  Windows Kernel Graphics Subsystem
+```
 
 ## Features
 
-- ✅ Blocks GDI-based screenshot tools (BitBlt, PrintScreen)
-- ✅ Blocks DirectX frame buffer access
-- ✅ Runtime enable/disable of blocking
+- ✅ **System-wide screenshot blocking** at kernel level
+- ✅ **Standalone control application** (no DLL required)
+- ✅ Runtime enable/disable via simple commands
 - ✅ Minimal performance overhead
-- ✅ Easy integration via DLL
-- ✅ Comprehensive test suite
-- ✅ **Kernel-level safety checks** to prevent system crashes (BSODs)
-- ✅ **Structured exception handling** in all hook functions
-- ✅ **Memory validation** before all pointer operations
+- ✅ **Kernel-level safety checks** to prevent system crashes
+- ✅ **Structured exception handling** in kernel code
+- ✅ **Spin lock protection** for thread-safe state management
 
 ## Quick Start
 
@@ -34,97 +45,118 @@ SSAPT is a lightweight DLL-based driver that intercepts common screenshot captur
 
 See [BUILD.md](BUILD.md) for detailed build instructions.
 
+**Prerequisites:**
+- Windows Driver Kit (WDK) for kernel driver
+- Visual Studio 2019 or later
+- Administrator privileges for installation
+
+**Build Control Application:**
 ```bash
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release
 ```
 
-### Testing
+**Build Kernel Driver:**
+Use Visual Studio with WDK integration or the WDK build environment.
 
-Run the included test suite:
+### Installation
 
-```bash
-.\build\ssapt_test.exe
+**Step 1: Install the kernel driver**
+```cmd
+# Run as Administrator
+driver_manager.bat install
+driver_manager.bat start
+```
+
+**Step 2: Verify driver is running**
+```cmd
+driver_manager.bat status
 ```
 
 ### Usage
 
-Load the DLL in your application:
+**Enable screenshot blocking:**
+```cmd
+ssapt.exe enable
+```
 
-```cpp
-#include "driver.h"
+**Disable screenshot blocking:**
+```cmd
+ssapt.exe disable
+```
 
-// Enable screenshot blocking
-EnableBlocking();
-
-// Your protected code here...
-
-// Disable blocking when done
-DisableBlocking();
+**Check status:**
+```cmd
+ssapt.exe status
 ```
 
 ## How It Works
 
-### GDI Hooking
+### Kernel-Mode Hooking
 
-The driver hooks critical GDI functions using IAT (Import Address Table) hooking or detours:
+The kernel driver intercepts graphics-related system calls at the kernel level:
 
-- **BitBlt**: Blocks the primary method used by most screenshot tools
-- **GetDIBits**: Prevents direct frame buffer reading
-- **CreateCompatibleDC/Bitmap**: Monitors bitmap operations
+- **NtGdiDdDDIPresent**: Monitors frame presentation (allows normal rendering)
+- **NtGdiDdDDIGetDisplayModeList**: Can be blocked when protection is enabled
+- Additional kernel graphics APIs as needed
 
-### DirectX Hooking
-
-DirectX methods are hooked via vtable manipulation:
-
-- **D3D9 Present**: Monitors frame presentation (allows normal rendering)
-- **D3D9 GetFrontBufferData**: Blocks front buffer capture
-- **DXGI Present**: Monitors DXGI swap chain presentation
-- **DXGI GetBuffer**: Blocks buffer access for screenshots
-
-### Architecture
+### Communication Architecture
 
 ```
-Application
+User Mode Control App (ssapt.exe)
+    ↓ (IOCTL Commands)
+Kernel Driver (ssapt.sys)
+    ↓ (Hook/Block)
+Windows Kernel Graphics APIs
     ↓
-SSAPT Driver (DLL)
-    ↓
-Hooked Functions → Original Functions (if allowed)
-    ↓
-Windows GDI/DirectX
+Display Hardware
 ```
 
-## API Reference
+### IOCTL Interface
 
-### Functions
+The control application communicates with the kernel driver via Device I/O Control (IOCTL):
 
-- `void EnableBlocking()` - Enables screenshot blocking
-- `void DisableBlocking()` - Disables screenshot blocking
-- `bool IsBlockingEnabled()` - Checks if blocking is currently enabled
+- **IOCTL_SSAPT_ENABLE**: Enable system-wide blocking
+- **IOCTL_SSAPT_DISABLE**: Disable system-wide blocking  
+- **IOCTL_SSAPT_STATUS**: Query current blocking state
 
-### Export
+## Command Reference
 
-All functions are exported with C linkage for easy FFI integration.
+### Control Application Commands
+
+- `ssapt.exe enable` - Enables system-wide screenshot blocking
+- `ssapt.exe disable` - Disables system-wide screenshot blocking
+- `ssapt.exe status` - Checks if blocking is currently enabled
+- `ssapt.exe help` - Shows usage information
+
+### Driver Management
+
+- `driver_manager.bat install` - Installs the kernel driver
+- `driver_manager.bat start` - Starts the driver service
+- `driver_manager.bat stop` - Stops the driver service
+- `driver_manager.bat uninstall` - Uninstalls the driver
+- `driver_manager.bat status` - Shows driver status
 
 ## Limitations
 
-- Application-level hooking with kernel-level safety protections
-- May not block all screenshot methods (e.g., hardware capture cards)
-- Requires the DLL to be loaded in the target process
-- Some antivirus software may flag hooking behavior
+- Requires Windows Driver Signature (or test signing mode for development)
+- Must be installed and run with Administrator privileges
+- May not block hardware capture cards or physical camera capture
+- Requires system reboot in some cases for driver changes
+- Only works on Windows operating systems
 
 ## Safety and Stability
 
-The driver includes comprehensive safety measures:
+The kernel driver includes comprehensive safety measures:
 
-- **Structured Exception Handling (SEH)**: All hooks protected with `__try/__except`
-- **Memory Validation**: Pointer validation before all memory operations
-- **Bounds Checking**: Vtable indices and array access validated
-- **Null Pointer Checks**: All pointers validated before use
-- **Graceful Error Handling**: Failures return error codes without crashing
+- **Spin Lock Protection**: Thread-safe state management using kernel spin locks
+- **IRQL Management**: Proper IRQL level handling for all operations
+- **Structured Exception Handling**: Kernel-safe exception handling
+- **Memory Validation**: All pointers validated before use in kernel space
+- **Graceful Error Handling**: Returns proper NTSTATUS codes
 
-These protections ensure the driver cannot cause system crashes or BSODs even if unexpected errors occur.
+These protections ensure the driver operates safely in kernel mode without causing system crashes or BSODs.
 
 ## Use Cases
 
@@ -135,21 +167,24 @@ These protections ensure the driver cannot cause system crashes or BSODs even if
 
 ## Technical Details
 
-### Hooked Functions
+### Kernel APIs Hooked
 
-**GDI Functions:**
-- `BitBlt` - Blocks screen-to-memory transfers
-- `GetDIBits` - Blocks DIB (Device Independent Bitmap) retrieval
-- `CreateCompatibleDC` - Monitored for screenshot detection
-- `CreateCompatibleBitmap` - Monitored for screenshot detection
+**Windows Graphics Kernel APIs:**
+- `NtGdiDdDDIPresent` - Monitors frame presentation (allows normal rendering)
+- `NtGdiDdDDIGetDisplayModeList` - Can be blocked when protection is enabled
+- Additional kernel graphics subsystem calls as needed
 
-**DirectX 9 Functions:**
-- `IDirect3DDevice9::Present` - Monitored (allows normal rendering)
-- `IDirect3DDevice9::GetFrontBufferData` - Blocked
+### Driver Architecture
 
-**DirectX 11/DXGI Functions:**
-- `IDXGISwapChain::Present` - Monitored (allows normal rendering)
-- `IDXGISwapChain::GetBuffer` - Blocked
+**Kernel Components:**
+- Device object: `\Device\SSAPT`
+- Symbolic link: `\??\SSAPT`
+- Service name: `SSAPT`
+- Start type: Demand start
+
+**User-Mode Components:**
+- Control application: `ssapt.exe`
+- Device link: `\\.\SSAPT`
 
 ## Contributing
 
@@ -161,4 +196,30 @@ For private testing use only.
 
 ## Security Notice
 
-This driver is designed for testing purposes. Using it in production environments or to circumvent legitimate security measures may violate terms of service or local laws.
+This kernel driver is designed for testing and research purposes only. 
+
+**Important Warnings:**
+- Kernel-mode code runs with highest privileges and can affect system stability
+- Only install drivers from trusted sources
+- Use test signing mode during development
+- Driver must be properly signed for production use
+- Using this to circumvent legitimate security measures may violate laws or terms of service
+- Always test in a controlled environment first
+
+## Development Mode
+
+To install unsigned drivers during development:
+
+1. Enable test signing mode:
+```cmd
+bcdedit /set testsigning on
+```
+
+2. Reboot the system
+
+3. Install and test the driver
+
+4. When done, disable test signing:
+```cmd
+bcdedit /set testsigning off
+```

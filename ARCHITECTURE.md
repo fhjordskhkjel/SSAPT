@@ -4,297 +4,349 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Target Application                        │
+│                      User Mode                               │
+│                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │              Application Code                         │   │
-│  └────────────┬─────────────────────────────────────────┘   │
-│               │ Calls GDI/DirectX APIs                       │
-│               ▼                                              │
+│  │      Control Application (ssapt.exe)                  │   │
+│  │                                                       │   │
+│  │  Commands: enable, disable, status                   │   │
+│  └─────────────┬────────────────────────────────────────┘   │
+│                │                                             │
+│                │ IOCTL Commands                              │
+│                │ (CreateFile, DeviceIoControl)               │
+└────────────────┼─────────────────────────────────────────────┘
+                 │
+════════════════ │ ═══════════════════════════════════════════
+                 │ Kernel/User Mode Boundary
+════════════════ ▼ ═══════════════════════════════════════════
+┌─────────────────────────────────────────────────────────────┐
+│                     Kernel Mode                              │
+│                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │              SSAPT Driver (DLL)                       │   │
-│  │  ┌────────────────────────────────────────────────┐  │   │
-│  │  │          Hook Interceptors                     │  │   │
-│  │  │  • BitBlt → HookedBitBlt                       │  │   │
-│  │  │  • GetDIBits → HookedGetDIBits                 │  │   │
-│  │  │  • D3D9::Present → HookedD3D9Present           │  │   │
-│  │  │  • D3D9::GetFrontBufferData → Blocked          │  │   │
-│  │  │  • DXGI::Present → HookedDXGIPresent           │  │   │
-│  │  │  • DXGI::GetBuffer → Blocked                   │  │   │
-│  │  └─────────────┬──────────────────────────────────┘  │   │
-│  │                │                                      │   │
-│  │                ▼                                      │   │
-│  │  ┌────────────────────────────────────────────────┐  │   │
-│  │  │      Block/Allow Decision Logic                │  │   │
-│  │  │      (g_BlockScreenshots flag)                 │  │   │
-│  │  └─────────────┬──────────────────────────────────┘  │   │
-│  │                │                                      │   │
-│  │                ▼                                      │   │
-│  │  ┌────────────────────────────────────────────────┐  │   │
-│  │  │    Original Function Forwarding                │  │   │
-│  │  │    (if not blocked)                            │  │   │
-│  │  └─────────────┬──────────────────────────────────┘  │   │
+│  │         SSAPT Kernel Driver (ssapt.sys)              │   │
+│  │                                                       │   │
+│  │  ┌──────────────────────────────────────────────┐   │   │
+│  │  │   Device Object (\Device\SSAPT)              │   │   │
+│  │  │   • IRP_MJ_CREATE                            │   │   │
+│  │  │   • IRP_MJ_CLOSE                             │   │   │
+│  │  │   • IRP_MJ_DEVICE_CONTROL (IOCTLs)           │   │   │
+│  │  └─────────────┬────────────────────────────────┘   │   │
+│  │                │                                     │   │
+│  │                ▼                                     │   │
+│  │  ┌──────────────────────────────────────────────┐   │   │
+│  │  │   Global State (Spin Lock Protected)         │   │   │
+│  │  │   • BlockingEnabled flag                     │   │   │
+│  │  └─────────────┬────────────────────────────────┘   │   │
+│  │                │                                     │   │
+│  │                ▼                                     │   │
+│  │  ┌──────────────────────────────────────────────┐   │   │
+│  │  │   Kernel Hook Interceptors                   │   │   │
+│  │  │   • NtGdiDdDDIPresent → Hooked               │   │   │
+│  │  │   • NtGdiDdDDIGetDisplayModeList → Blocked   │   │   │
+│  │  └─────────────┬────────────────────────────────┘   │   │
 │  └────────────────┼──────────────────────────────────────┘   │
 │                   │                                          │
 │                   ▼                                          │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │            Windows GDI/DirectX APIs                   │   │
+│  │      Windows Kernel Graphics Subsystem               │   │
+│  │      (win32k.sys, dxgkrnl.sys)                       │   │
 │  └──────────────────────────────────────────────────────┘   │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## Component Architecture
 
-### 1. Core Driver Module (`driver.cpp`)
+### 1. Kernel Driver Module (`kernel_driver.c`)
 
 **Responsibilities:**
-- DLL initialization and cleanup
-- GDI function hooking setup
-- Exported API implementation
-- Global state management
+- Kernel driver initialization and cleanup
+- Device and symbolic link creation
+- IOCTL request handling
+- Kernel graphics API hooking
+- Thread-safe state management
+
+**Key Components:**
+```c
+// Global state (spin lock protected)
+typedef struct _SSAPT_GLOBALS {
+    PDEVICE_OBJECT DeviceObject;
+    BOOLEAN BlockingEnabled;
+    KSPIN_LOCK StateLock;
+} SSAPT_GLOBALS;
+
+// Driver entry point
+NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
+
+// IOCTL handler
+NTSTATUS DeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+
+// Hook functions
+NTSTATUS HookedNtGdiDdDDIPresent(VOID* pPresentData);
+```
+
+### 2. Control Application (`control_app.cpp`)
+
+**Responsibilities:**
+- User-mode interface to kernel driver
+- IOCTL command execution
+- Status reporting
+- Command-line argument parsing
 
 **Key Components:**
 ```cpp
-// Global state
-bool g_BlockScreenshots = true;
+class SSAPTController {
+    HANDLE hDevice;
+    bool Enable();
+    bool Disable();
+    bool GetStatus(bool* pEnabled);
+    void ShowStatus();
+};
 
-// Hook installation
-bool InitializeHooks() {
-    DetourTransactionBegin();
-    DetourAttach(&(PVOID&)TrueBitBlt, HookedBitBlt);
-    // ... more hooks
-    DetourTransactionCommit();
-}
-
-// Public API
-void EnableBlocking() { g_BlockScreenshots = true; }
-void DisableBlocking() { g_BlockScreenshots = false; }
+// Command handlers
+int main(int argc, char* argv[]);
 ```
 
-### 2. DirectX Hooks Module (`dx_hooks.cpp`)
+### 3. Driver Management (`driver_manager.bat`)
 
 **Responsibilities:**
-- DirectX 9 vtable hooking
-- DirectX 11/DXGI vtable hooking
-- Temporary device creation
-- Memory protection management
+- Driver service installation
+- Service start/stop control
+- Service status query
+- Service uninstallation
 
-**Key Components:**
-```cpp
-// VTable hooking
-bool HookVTableMethod(void** vtable, int index, 
-                      void* hookFunc, void** originalFunc);
-
-// DirectX initialization
-bool InitializeD3D9Hooks();
-bool InitializeDXGIHooks();
+**Commands:**
+```batch
+driver_manager.bat install
+driver_manager.bat start
+driver_manager.bat stop
+driver_manager.bat uninstall
+driver_manager.bat status
 ```
 
-### 3. Public API (`driver.h`)
+## Communication Flow Diagrams
 
-**Responsibilities:**
-- Exported function declarations
-- C linkage for FFI
-- API documentation
-
-**Interface:**
-```cpp
-extern "C" {
-    __declspec(dllexport) void EnableBlocking();
-    __declspec(dllexport) void DisableBlocking();
-    __declspec(dllexport) bool IsBlockingEnabled();
-}
-```
-
-## Hook Flow Diagrams
-
-### GDI BitBlt Hook Flow
+### Enable/Disable Flow
 
 ```
-Application calls BitBlt()
+User executes: ssapt.exe enable
     ↓
-IAT/Detours redirects to HookedBitBlt()
+Control app opens device: \\.\SSAPT
     ↓
-Check g_BlockScreenshots flag
+Send IOCTL_SSAPT_ENABLE via DeviceIoControl()
     ↓
-    ├─[if TRUE]─→ Log "Blocked" → Return FALSE
+    [Kernel Mode]
+    ↓
+Kernel driver receives IRP_MJ_DEVICE_CONTROL
+    ↓
+Acquire spin lock
+    ↓
+Set BlockingEnabled = TRUE
+    ↓
+Release spin lock
+    ↓
+Complete IRP with STATUS_SUCCESS
+    ↓
+    [User Mode]
+    ↓
+Control app receives success
+    ↓
+Display: "Screenshot blocking ENABLED"
+```
+
+### Status Query Flow
+
+```
+User executes: ssapt.exe status
+    ↓
+Control app opens device: \\.\SSAPT
+    ↓
+Send IOCTL_SSAPT_STATUS via DeviceIoControl()
+    ↓
+    [Kernel Mode]
+    ↓
+Acquire spin lock (read)
+    ↓
+Read BlockingEnabled flag
+    ↓
+Release spin lock
+    ↓
+Write status to output buffer
+    ↓
+Complete IRP with STATUS_SUCCESS
+    ↓
+    [User Mode]
+    ↓
+Control app reads status from buffer
+    ↓
+Display: "Status: ENABLED/DISABLED"
+```
+
+### Kernel Hook Flow
+
+```
+Application calls graphics function
+    ↓
+Windows dispatches to win32k.sys
+    ↓
+SSAPT hook intercepts NtGdiDdDDIPresent()
+    ↓
+Acquire spin lock (read)
+    ↓
+Check BlockingEnabled flag
+    ↓
+    ├─[if TRUE]─→ Log "Monitored" → Call original → Return
     │
-    └─[if FALSE]─→ Call TrueBitBlt() → Return result
-```
-
-### DirectX VTable Hook Flow
-
-```
-Application calls device->Present()
-    ↓
-VTable lookup finds HookedDXGIPresent()
-    ↓
-Check g_BlockScreenshots flag
-    ↓
-Log "Monitored"
-    ↓
-Call original Present() via stored pointer
-    ↓
-Return result
-```
-
-### Frame Buffer Access Block Flow
-
-```
-Application calls GetFrontBufferData()
-    ↓
-VTable lookup finds HookedD3D9GetFrontBufferData()
-    ↓
-Check g_BlockScreenshots flag
-    ↓
-    ├─[if TRUE]─→ Log "Blocked" → Return D3DERR_INVALIDCALL
-    │
-    └─[if FALSE]─→ Call original function → Return result
+    └─[if FALSE]─→ Call original → Return
 ```
 
 ## Data Flow
 
-### Hook Installation (Initialization)
+### Driver Installation and Startup
 
 ```
-DLL_PROCESS_ATTACH
+Administrator runs: driver_manager.bat install
     ↓
-InitializeHooks() [GDI hooks]
-    │
-    ├─→ DetourTransactionBegin()
-    ├─→ DetourAttach(TrueBitBlt, HookedBitBlt)
-    ├─→ DetourAttach(TrueGetDIBits, HookedGetDIBits)
-    ├─→ DetourAttach(other GDI functions...)
-    └─→ DetourTransactionCommit()
+sc create SSAPT binPath=ssapt.sys type=kernel
     ↓
-InitializeDirectXHooks() [DirectX hooks]
+Service created in registry
+    ↓
+Administrator runs: driver_manager.bat start
+    ↓
+Service Control Manager loads ssapt.sys
+    ↓
+    [Kernel Mode]
+    ↓
+DriverEntry() called
     │
-    ├─→ InitializeD3D9Hooks()
-    │   ├─→ Create temporary D3D9 device
-    │   ├─→ Extract vtable from device
-    │   ├─→ Hook Present method
-    │   ├─→ Hook GetFrontBufferData method
-    │   └─→ Release temporary device
-    │
-    └─→ InitializeDXGIHooks()
-        ├─→ Create temporary DXGI swap chain
-        ├─→ Extract vtable from swap chain
-        ├─→ Hook Present method
-        ├─→ Hook GetBuffer method
-        └─→ Release temporary swap chain
+    ├─→ Initialize global state
+    ├─→ Create device object: \Device\SSAPT
+    ├─→ Create symbolic link: \??\SSAPT
+    ├─→ Set up IRP handlers (CREATE, CLOSE, DEVICE_CONTROL)
+    ├─→ Initialize kernel hooks (SSDT/inline)
+    └─→ Return STATUS_SUCCESS
+    ↓
+Driver loaded and ready
 ```
 
-### Screenshot Attempt (Runtime)
+### Screenshot Blocking (Runtime)
 
 ```
-User presses PrintScreen or uses screenshot tool
+Any application attempts graphics operation
     ↓
-Tool attempts to capture screen via:
+Windows kernel dispatches to graphics subsystem
+    ↓
+SSAPT hook intercepts kernel call
     │
-    ├─→ [GDI Path]
-    │   ├─→ CreateCompatibleDC() → HookedCreateCompatibleDC()
-    │   │   └─→ Log "Monitored" → Allow
-    │   ├─→ CreateCompatibleBitmap() → HookedCreateCompatibleBitmap()
-    │   │   └─→ Log "Monitored" → Allow
-    │   └─→ BitBlt() → HookedBitBlt()
-    │       └─→ [BLOCKED] Return FALSE
+    ├─→ [If NtGdiDdDDIPresent]
+    │   ├─→ Acquire spin lock
+    │   ├─→ Read BlockingEnabled
+    │   ├─→ Release spin lock
+    │   ├─→ Log if enabled
+    │   └─→ Forward to original function
     │
-    └─→ [DirectX Path]
-        ├─→ GetFrontBufferData() → HookedD3D9GetFrontBufferData()
-        │   └─→ [BLOCKED] Return D3DERR_INVALIDCALL
-        │
-        └─→ GetBuffer() → HookedDXGIGetBuffer()
-            └─→ [BLOCKED] Return E_FAIL
+    └─→ [If NtGdiDdDDIGetDisplayModeList]
+        ├─→ Acquire spin lock
+        ├─→ Check BlockingEnabled
+        └─→ If TRUE:
+            │   └─→ Return STATUS_ACCESS_DENIED
+            └─→ If FALSE:
+                └─→ Forward to original function
 ```
 
 ## Memory Layout
 
-### Hook Storage
+### Kernel Driver State
 
 ```
+┌─────────────────────────────────────┐
+│       SSAPT_GLOBALS Structure       │
+├─────────────────────────────────────┤
+│  DeviceObject      → PDEVICE_OBJECT │
+│  BlockingEnabled   → BOOLEAN        │
+│  StateLock         → KSPIN_LOCK     │
+└─────────────────────────────────────┘
+
 ┌─────────────────────────────────────┐
 │     Original Function Pointers      │
+│      (Kernel Address Space)         │
 ├─────────────────────────────────────┤
-│  TrueBitBlt          → 0x7FF81234   │
-│  TrueGetDIBits       → 0x7FF81567   │
-│  g_OriginalD3D9Present → 0x7FF89ABC │
-│  g_OriginalDXGIPresent → 0x7FF8DEF0 │
+│  g_OriginalNtGdiDdDDIPresent        │
+│     → 0xFFFFF80001234000 (kernel)   │
+│  g_OriginalNtGdiDdDDIGetDisplayMode │
+│     → 0xFFFFF80001234100 (kernel)   │
 └─────────────────────────────────────┘
 
 ┌─────────────────────────────────────┐
-│      Hook Function Pointers         │
+│       Hook Function Pointers        │
+│      (Driver Code Section)          │
 ├─────────────────────────────────────┤
-│  HookedBitBlt        → 0x10001000   │
-│  HookedGetDIBits     → 0x10001100   │
-│  HookedD3D9Present   → 0x10001200   │
-│  HookedDXGIPresent   → 0x10001300   │
-└─────────────────────────────────────┘
-
-┌─────────────────────────────────────┐
-│         Global State                │
-├─────────────────────────────────────┤
-│  g_BlockScreenshots  → true/false   │
+│  HookedNtGdiDdDDIPresent            │
+│     → 0xFFFFF88001000000 (driver)   │
+│  HookedNtGdiDdDDIGetDisplayModeList │
+│     → 0xFFFFF88001000100 (driver)   │
 └─────────────────────────────────────┘
 ```
 
-### VTable Modification
+### Device Object Structure
 
-**Before Hooking:**
 ```
-IDXGISwapChain vtable:
-[0]: QueryInterface
-[1]: AddRef
-[2]: Release
-...
-[8]: Present         → 0x7FF8ABCD (original)
-[9]: GetBuffer       → 0x7FF8BCDE (original)
-```
-
-**After Hooking:**
-```
-IDXGISwapChain vtable:
-[0]: QueryInterface
-[1]: AddRef
-[2]: Release
-...
-[8]: Present         → 0x10001300 (HookedDXGIPresent)
-[9]: GetBuffer       → 0x10001400 (HookedDXGIGetBuffer)
+Device Object: \Device\SSAPT
+    ↓
+Symbolic Link: \??\SSAPT
+    ↓
+User-mode access: \\.\SSAPT
+    ↓
+IRP Handlers:
+    • IRP_MJ_CREATE
+    • IRP_MJ_CLOSE
+    • IRP_MJ_DEVICE_CONTROL
 ```
 
 ## Thread Safety
 
-### Current Implementation
-- Single global flag (`g_BlockScreenshots`)
-- No mutex protection
-- Safe for single-threaded applications
-- Potential race conditions in multi-threaded scenarios
+### Kernel Implementation
+- Global state protected by **KSPIN_LOCK**
+- All state access wrapped in `KeAcquireSpinLock/KeReleaseSpinLock`
+- Safe for multi-processor systems
+- Proper IRQL level management
 
-### Potential Improvements
-```cpp
-// Thread-safe implementation
-#include <atomic>
-std::atomic<bool> g_BlockScreenshots(true);
+### Spin Lock Usage
+```c
+// Reading state
+KIRQL oldIrql;
+BOOLEAN shouldBlock;
 
-// Usage in hooks
-if (g_BlockScreenshots.load(std::memory_order_acquire)) {
-    // Block operation
-}
+KeAcquireSpinLock(&g_Globals.StateLock, &oldIrql);
+shouldBlock = g_Globals.BlockingEnabled;
+KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
+
+// Modifying state (in IOCTL handler)
+KeAcquireSpinLock(&g_Globals.StateLock, &oldIrql);
+g_Globals.BlockingEnabled = TRUE;  // or FALSE
+KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
 ```
+
+### IRQL Considerations
+- Spin locks raise IRQL to DISPATCH_LEVEL
+- Hook functions execute at various IRQLs
+- Proper IRQL management prevents system deadlocks
 
 ## Performance Characteristics
 
-### Hook Overhead
+### Kernel Hook Overhead
 
-| Operation | Unhook | Hooked (Allow) | Hooked (Block) |
-|-----------|--------|----------------|----------------|
-| BitBlt | 100μs | 101μs | 1μs |
-| GetDIBits | 50μs | 51μs | 1μs |
-| D3D9 Present | 16.6ms | 16.6ms | 16.6ms |
-| GetFrontBufferData | 1ms | - | 1μs |
+| Operation | Unhooked | Hooked (Monitor) | Hooked (Block) |
+|-----------|----------|------------------|----------------|
+| NtGdiDdDDIPresent | Direct call | +Spin lock +Check | +Spin lock +Check |
+| Graphics operation | ~16ms | ~16.001ms | ~0.001ms (blocked) |
+| IOCTL command | N/A | ~0.1ms | ~0.1ms |
 
 **Notes:**
-- Negligible overhead for allowed operations (~1%)
+- Spin lock overhead: ~1-5μs
+- Negligible impact on frame rates
 - Blocked operations return immediately
-- Present operations unaffected (monitoring only)
+- System-wide protection (no per-process overhead)
 
 ## Security Model
 
@@ -305,75 +357,102 @@ if (g_BlockScreenshots.load(std::memory_order_acquire)) {
 │     Layer 4: Application Logic          │
 │  (Additional app-specific protection)   │
 ├─────────────────────────────────────────┤
-│     Layer 3: SSAPT Driver                │
-│  (API hooking and blocking)             │
+│     Layer 3: User-Mode APIs              │
+│  (GDI, DirectX, Windows.Graphics)       │
 ├─────────────────────────────────────────┤
-│     Layer 2: Windows APIs                │
-│  (GDI, DirectX)                         │
+│     Layer 2: SSAPT Kernel Driver         │
+│  (Kernel-mode hooking and blocking)     │  ← We operate here
 ├─────────────────────────────────────────┤
-│     Layer 1: Hardware/OS                 │
-│  (Display drivers, frame buffers)       │
+│     Layer 1: Windows Kernel              │
+│  (win32k.sys, dxgkrnl.sys)              │
+├─────────────────────────────────────────┤
+│     Layer 0: Hardware                    │
+│  (GPU, display hardware)                │
 └─────────────────────────────────────────┘
 ```
 
-**SSAPT operates at Layer 3**, providing protection against:
-- User-mode screenshot tools
-- GDI-based capture
-- DirectX frame buffer access
+**SSAPT operates at Layer 2 (Kernel Mode)**, providing protection against:
+- User-mode screenshot tools (all processes)
+- System-wide screenshot blocking
+- Kernel graphics API interception
+- Most screenshot capture methods
+
+**Provides stronger protection than:**
+- User-mode DLL injection
+- Per-process hooking
+- Application-level protection
 
 **Does NOT protect against:**
-- Kernel-mode capture
-- Hardware capture
-- Alternative APIs (Windows.Graphics.Capture)
+- Physical camera capture
+- Hardware capture cards
+- Direct GPU memory access (DMA)
+- Other kernel drivers operating at same or lower level
 
 ## Build System Architecture
 
 ```
-CMakeLists.txt (root)
+Build System (Two-Part)
     │
-    ├─→ ssapt_driver (SHARED library)
-    │   ├─ driver.cpp
-    │   ├─ dx_hooks.cpp
-    │   └─ Links: gdi32, d3d9, d3d11, dxgi
+    ├─→ User-Mode (CMake)
+    │   │
+    │   └─→ ssapt_control (EXECUTABLE)
+    │       ├─ control_app.cpp
+    │       └─ Output: ssapt.exe
     │
-    ├─→ ssapt_test (EXECUTABLE)
-    │   ├─ test_driver.cpp
-    │   └─ Links: ssapt_driver, gdi32
-    │
-    └─→ ssapt_example (EXECUTABLE)
-        ├─ example.cpp
-        └─ Links: ssapt_driver, gdi32
+    └─→ Kernel-Mode (WDK)
+        │
+        ├─→ ssapt_driver (KERNEL DRIVER)
+        │   ├─ kernel_driver.c
+        │   ├─ sources
+        │   ├─ ssapt.inf
+        │   └─ Output: ssapt.sys
+        │
+        └─→ Build Requirements:
+            ├─ Windows Driver Kit (WDK)
+            ├─ Visual Studio with WDK integration
+            └─ Code signing certificate (for production)
 ```
 
 ## Deployment Scenarios
 
-### Scenario 1: Static Linking
+### Scenario 1: Development/Testing
 ```
-Application.exe
-    ├─ (linked against ssapt.lib)
-    └─ Uses: driver.h
+1. Enable test signing:
+   bcdedit /set testsigning on
+   (reboot)
 
-Runtime:
-    Application.exe + ssapt.dll
-```
+2. Install driver:
+   driver_manager.bat install
+   driver_manager.bat start
 
-### Scenario 2: Dynamic Loading
-```
-Application.exe
-    └─ LoadLibrary("ssapt.dll")
-    └─ GetProcAddress("EnableBlocking")
-
-Runtime:
-    Application.exe + ssapt.dll (loaded at runtime)
+3. Use control app:
+   ssapt.exe enable/disable/status
 ```
 
-### Scenario 3: DLL Injection
+### Scenario 2: Production Deployment
 ```
-Target.exe (already running)
-    ↓
-inject.py injects ssapt.dll
-    ↓
-SSAPT hooks installed in Target.exe
+1. Sign driver with valid certificate
+2. Submit to Microsoft for attestation
+3. Create installation package (MSI)
+4. Install via:
+   - MSI installer
+   - INF file with pnputil
+   - Service Control Manager (sc)
+
+5. Distribute control app
+```
+
+### Scenario 3: Enterprise Deployment
+```
+1. Use Group Policy to deploy:
+   - Driver installation
+   - Default blocking state
+   - Auto-start configuration
+
+2. Centralized management:
+   - Remote enable/disable via scripts
+   - Scheduled tasks
+   - Configuration management tools
 ```
 
 ## Error Handling

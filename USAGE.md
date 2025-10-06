@@ -2,380 +2,417 @@
 
 ## Installation
 
-### Method 1: Direct DLL Injection
+SSAPT is now a kernel-mode driver that provides system-wide screenshot protection. Installation requires Administrator privileges.
 
-Copy `ssapt.dll` to the same directory as your application executable.
+### Step 1: Enable Test Signing (Development)
 
-### Method 2: System-wide Installation
+For unsigned drivers during development:
 
-1. Copy `ssapt.dll` to `C:\Windows\System32` (requires admin privileges)
-2. Register the DLL if needed:
-   ```bash
-   regsvr32 ssapt.dll
-   ```
-
-## Integration Methods
-
-### Static Linking
-
-Link against the import library at compile time:
-
-```cpp
-#include "driver.h"
-
-int main() {
-    EnableBlocking();
-    
-    // Protected code
-    MessageBox(NULL, "Screenshots are blocked", "Protected", MB_OK);
-    
-    DisableBlocking();
-    return 0;
-}
+```cmd
+bcdedit /set testsigning on
 ```
 
-Compile with:
-```bash
-cl myapp.cpp /link ssapt.lib
+**Reboot your system** after enabling test signing.
+
+### Step 2: Install the Driver
+
+Open Command Prompt as Administrator and run:
+
+```cmd
+driver_manager.bat install
+driver_manager.bat start
 ```
 
-### Dynamic Loading
+### Step 3: Verify Installation
 
-Load the DLL at runtime:
+Check that the driver is running:
 
-```cpp
-#include <windows.h>
-
-typedef void (*EnableBlockingFunc)();
-typedef void (*DisableBlockingFunc)();
-typedef bool (*IsBlockingEnabledFunc)();
-
-int main() {
-    HMODULE hDll = LoadLibrary("ssapt.dll");
-    if (!hDll) {
-        printf("Failed to load ssapt.dll\n");
-        return 1;
-    }
-    
-    EnableBlockingFunc EnableBlocking = 
-        (EnableBlockingFunc)GetProcAddress(hDll, "EnableBlocking");
-    DisableBlockingFunc DisableBlocking = 
-        (DisableBlockingFunc)GetProcAddress(hDll, "DisableBlocking");
-    
-    if (EnableBlocking) {
-        EnableBlocking();
-        printf("Screenshot blocking enabled\n");
-    }
-    
-    // Protected code here
-    
-    if (DisableBlocking) {
-        DisableBlocking();
-        printf("Screenshot blocking disabled\n");
-    }
-    
-    FreeLibrary(hDll);
-    return 0;
-}
+```cmd
+driver_manager.bat status
 ```
 
-### Injection into Running Process
+You should see the service is "RUNNING".
 
-Use a DLL injector to load SSAPT into a running process:
+## Basic Usage
 
-```bash
-# Using Process Hacker
-1. Open Process Hacker
-2. Right-click on target process
-3. Select "Inject DLL"
-4. Choose ssapt.dll
+The SSAPT driver is controlled via the `ssapt.exe` command-line application.
+
+### Enable Screenshot Blocking
+
+```cmd
+ssapt.exe enable
 ```
+
+This enables system-wide screenshot blocking. All screenshot attempts will be blocked.
+
+### Disable Screenshot Blocking
+
+```cmd
+ssapt.exe disable
+```
+
+This disables the blocking. Screenshots will work normally.
+
+### Check Status
+
+```cmd
+ssapt.exe status
+```
+
+This shows whether blocking is currently enabled or disabled.
+
+### Help
+
+```cmd
+ssapt.exe help
+```
+
+Shows usage information and available commands.
 
 ## Testing Screenshots
 
-### Built-in Test
+### Testing the Driver
 
-Run the included test suite:
+1. **Enable blocking:**
+   ```cmd
+   ssapt.exe enable
+   ```
 
-```bash
-ssapt_test.exe
-```
-
-Expected output:
-```
-=== SSAPT Driver Test ===
-Testing screenshot blocking functionality
-
->>> Testing with blocking ENABLED <<<
-
-[TEST] Attempting GDI screenshot...
-[SSAPT] Blocked BitBlt screenshot attempt
-[TEST] GDI screenshot blocked successfully!
-
-[TEST] Attempting frame buffer access via GetDIBits...
-[SSAPT] Blocked GetDIBits screenshot attempt
-[TEST] Frame buffer access blocked successfully!
-
->>> Testing with blocking DISABLED <<<
-
-[TEST] Attempting GDI screenshot...
-[TEST] GDI screenshot succeeded (blocking may not be active)
-
-=== Test Results ===
-GDI BitBlt blocking: PASS
-Frame buffer blocking: PASS
-GDI unblocking: PASS
-Frame buffer unblocking: PASS
-
-Overall: ALL TESTS PASSED
-```
-
-### Manual Testing
-
-1. Enable blocking in your application
-2. Try taking screenshots with:
+2. **Try taking screenshots with:**
    - Windows Snipping Tool
    - Win+PrintScreen
    - Alt+PrintScreen
-   - Third-party screenshot tools
+   - ShareX or other third-party tools
+   - OBS or other screen capture software
 
-3. Verify that screenshots are:
-   - Completely black
-   - Failed to capture
-   - Return error messages
+3. **Verify the protection:**
+   - Screenshots should fail or show black screen
+   - Kernel debug messages visible in DebugView
+   - Event Viewer may show blocked attempts
+
+4. **Disable and test again:**
+   ```cmd
+   ssapt.exe disable
+   ```
+   Screenshots should work normally now.
 
 ## Common Use Cases
 
-### Video Game Protection
+### Protecting Sensitive Work Sessions
 
-```cpp
-#include "driver.h"
+Enable blocking before viewing sensitive information:
 
-void GameLoop() {
-    EnableBlocking();
-    
-    while (running) {
-        RenderFrame();
-        ProcessInput();
-        UpdateGame();
-    }
-    
-    DisableBlocking();
-}
+```cmd
+REM Enable protection
+ssapt.exe enable
+
+REM Do sensitive work (open documents, applications, etc.)
+start confidential_document.pdf
+
+REM When done, disable protection
+ssapt.exe disable
 ```
 
-### Secure Document Viewer
+### Automated Scripts
 
-```cpp
-#include "driver.h"
+Integrate SSAPT into batch scripts:
 
-void ViewSecureDocument(const char* filename) {
-    EnableBlocking();
-    
-    // Load and display document
-    DisplayDocument(filename);
-    
-    // Wait for user to close
-    WaitForUserClose();
-    
-    DisableBlocking();
-}
+```batch
+@echo off
+echo Starting secure session...
+ssapt.exe enable
+
+REM Run your application
+start /wait sensitive_app.exe
+
+echo Ending secure session...
+ssapt.exe disable
 ```
 
-### Video Conference Privacy
+### PowerShell Integration
 
-```cpp
-#include "driver.h"
+```powershell
+# Enable protection
+& "ssapt.exe" enable
 
-void StartVideoConference() {
-    // Block screenshots during sensitive calls
-    if (IsSensitiveCall()) {
-        EnableBlocking();
-    }
-    
-    RunVideoConference();
-    
-    DisableBlocking();
-}
+# Do sensitive work
+Start-Process "confidential_app.exe" -Wait
+
+# Disable protection
+& "ssapt.exe" disable
 ```
 
-## Configuration
+### Scheduled Tasks
 
-### Runtime Configuration
+Create a scheduled task to enable protection during specific hours:
 
-Control blocking behavior at runtime:
+```cmd
+REM Enable protection at 9 AM daily
+schtasks /create /tn "Enable SSAPT" /tr "C:\path\to\ssapt.exe enable" /sc daily /st 09:00
 
-```cpp
-// Enable/disable based on user preference
-if (userSettings.blockScreenshots) {
-    EnableBlocking();
-}
-
-// Check current state
-if (IsBlockingEnabled()) {
-    printf("Protection active\n");
-}
-
-// Toggle
-if (IsBlockingEnabled()) {
-    DisableBlocking();
-} else {
-    EnableBlocking();
-}
+REM Disable protection at 5 PM daily
+schtasks /create /tn "Disable SSAPT" /tr "C:\path\to\ssapt.exe disable" /sc daily /st 17:00
 ```
 
-### Environment Variables
+## Monitoring and Debugging
 
-Set environment variables to configure behavior:
+### Viewing Kernel Debug Messages
 
-```bash
-# Windows Command Prompt
-set SSAPT_DEBUG=1        # Enable debug logging
-set SSAPT_AUTOSTART=1    # Auto-enable on load
+Use DebugView from Sysinternals to see kernel debug output:
+
+1. Download DebugView from Microsoft Sysinternals
+2. Run as Administrator
+3. Enable "Capture Kernel" from the Capture menu
+4. Watch for `[SSAPT]` tagged messages
+
+### Checking Event Viewer
+
+1. Open Event Viewer (eventvwr.msc)
+2. Navigate to Windows Logs → System
+3. Look for events from "SSAPT" source
+
+### Driver Status
+
+Check detailed driver status:
+
+```cmd
+sc query SSAPT
 ```
+
+This shows:
+- Service state (RUNNING/STOPPED)
+- Start type
+- Service status code
 
 ## Troubleshooting
+
+### Driver Won't Install
+
+**Possible Causes:**
+1. Not running as Administrator
+2. Test signing not enabled
+3. Previous installation exists
+
+**Solutions:**
+```cmd
+REM Remove old installation
+driver_manager.bat uninstall
+
+REM Enable test signing
+bcdedit /set testsigning on
+
+REM Reboot
+shutdown /r /t 0
+
+REM Reinstall
+driver_manager.bat install
+driver_manager.bat start
+```
+
+### Control App Can't Connect
+
+**Error:** "Failed to open SSAPT device"
+
+**Solutions:**
+1. Check driver is running:
+   ```cmd
+   driver_manager.bat status
+   ```
+
+2. Restart the driver:
+   ```cmd
+   driver_manager.bat stop
+   driver_manager.bat start
+   ```
+
+3. Check for error messages in Event Viewer
 
 ### Screenshots Still Working
 
 **Possible Causes:**
-1. Driver not loaded properly
-2. Screenshot tool uses unsupported API
-3. Blocking disabled
+1. Blocking is disabled
+2. Screenshot method not covered by kernel hooks
+3. Hardware capture device
 
 **Solutions:**
-- Verify DLL is loaded: Check with Process Explorer
-- Ensure `EnableBlocking()` was called
-- Check that you have necessary permissions
+- Verify blocking is enabled: `ssapt.exe status`
+- Try different screenshot tools
+- Check DebugView for hook activity
 
-### Application Crashes
+### System Becomes Unstable
 
-**Possible Causes:**
-1. Incompatible DirectX version
-2. Memory protection conflicts
-3. Antivirus interference
+**If you experience system instability:**
 
-**Solutions:**
-- Run with administrator privileges
-- Add exception in antivirus
-- Check application event logs
+1. **Immediately stop the driver:**
+   ```cmd
+   driver_manager.bat stop
+   ```
 
-### Performance Issues
+2. **Check logs:**
+   - DebugView kernel messages
+   - Event Viewer system log
+   - Windows memory dumps
 
-**Possible Causes:**
-1. Debug logging enabled
-2. Multiple hooks active
-3. Conflicts with other overlays
+3. **Uninstall if needed:**
+   ```cmd
+   driver_manager.bat uninstall
+   ```
 
-**Solutions:**
-- Disable debug output in release builds
-- Minimize number of hooked applications
-- Check for hook conflicts
+4. **Reboot to clean state:**
+   ```cmd
+   shutdown /r /t 0
+   ```
 
 ## Best Practices
 
 ### 1. Enable Only When Needed
 
-```cpp
-// Bad: Always enabled
-EnableBlocking();
-RunApplication();
+Since SSAPT now blocks system-wide, only enable it when necessary:
 
-// Good: Enable for sensitive operations only
-if (IsSensitiveOperation()) {
-    EnableBlocking();
-    PerformOperation();
-    DisableBlocking();
-}
+```batch
+REM Good: Enable before sensitive work
+ssapt.exe enable
+start sensitive_app.exe
+ssapt.exe disable
 ```
 
-### 2. Error Handling
+### 2. Check Status Before Operations
 
-```cpp
-HMODULE hDll = LoadLibrary("ssapt.dll");
-if (!hDll) {
-    DWORD error = GetLastError();
-    fprintf(stderr, "Failed to load driver: %lu\n", error);
-    return 1;
-}
+Always verify the current state:
 
-// Use the driver...
-
-FreeLibrary(hDll);
+```batch
+@echo off
+ssapt.exe status | findstr "ENABLED" >nul
+if %errorlevel%==0 (
+    echo Protection already enabled
+) else (
+    echo Enabling protection...
+    ssapt.exe enable
+)
 ```
 
-### 3. User Notification
+### 3. Provide User Feedback
 
-```cpp
-void EnableProtection() {
-    EnableBlocking();
-    ShowNotification("Screenshot protection active");
-}
+Let users know when protection is active:
+
+```batch
+@echo off
+echo =====================================
+echo  Entering Secure Mode
+echo =====================================
+ssapt.exe enable
+echo Protection is now ACTIVE
+pause
+ssapt.exe disable
+echo Protection DISABLED
 ```
 
-### 4. Graceful Degradation
+### 4. Handle Errors Gracefully
 
-```cpp
-bool InitializeProtection() {
-    HMODULE hDll = LoadLibrary("ssapt.dll");
-    if (!hDll) {
-        // Continue without protection
-        LogWarning("Screenshot protection unavailable");
-        return false;
-    }
-    return true;
-}
+```batch
+@echo off
+ssapt.exe enable
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to enable protection
+    echo Check if driver is installed and running
+    exit /b 1
+)
+echo Protection enabled successfully
+```
+
+### 5. Clean Shutdown
+
+Always disable before system maintenance:
+
+```batch
+REM Before updates or maintenance
+ssapt.exe disable
+driver_manager.bat stop
 ```
 
 ## Advanced Usage
 
-### Custom Hook Behavior
+### Custom Kernel Hook Behavior
 
-Modify the driver source to customize blocking behavior:
+To customize blocking behavior, modify `kernel_driver.c`:
 
-```cpp
-// In driver.cpp, modify HookedBitBlt:
-BOOL WINAPI HookedBitBlt(...) {
-    if (g_BlockScreenshots) {
-        // Custom behavior: Log to file instead of console
-        LogToFile("BitBlt blocked at " + GetTimestamp());
-        
-        // Optional: Allow some screenshots
-        if (IsWhitelistedProcess()) {
-            return TrueBitBlt(...);
-        }
-        
-        return FALSE;
-    }
-    return TrueBitBlt(...);
-}
+```c
+// Add custom logic in HookedNtGdiDdDDIPresent or other hook functions
+// Recompile the kernel driver with WDK
 ```
 
-### Process Filtering
+### Integration with Other Applications
 
-Hook only specific processes:
+Create wrapper scripts for applications:
 
-```cpp
-bool ShouldBlockForProcess() {
-    char processName[MAX_PATH];
-    GetModuleFileName(NULL, processName, MAX_PATH);
-    
-    // Block only for certain applications
-    return strstr(processName, "sensitive_app.exe") != NULL;
-}
+**Example: Protected Browser Session**
+
+```batch
+@echo off
+REM protect_browser.bat
+echo Starting protected browser session...
+ssapt.exe enable
+start /wait chrome.exe --incognito
+ssapt.exe disable
+echo Protected session ended
 ```
 
-## API Reference Quick Guide
+**Example: Protected Remote Desktop**
 
-| Function | Description | Returns |
-|----------|-------------|---------|
-| `EnableBlocking()` | Activates screenshot blocking | void |
-| `DisableBlocking()` | Deactivates screenshot blocking | void |
-| `IsBlockingEnabled()` | Checks blocking status | bool |
+```batch
+@echo off
+REM protect_rdp.bat
+ssapt.exe enable
+mstsc.exe /v:server_address
+ssapt.exe disable
+```
+
+## Command Reference
+
+| Command | Description | Requires Admin |
+|---------|-------------|----------------|
+| `ssapt.exe enable` | Enable system-wide blocking | No* |
+| `ssapt.exe disable` | Disable system-wide blocking | No* |
+| `ssapt.exe status` | Check blocking status | No* |
+| `ssapt.exe help` | Show usage information | No |
+| `driver_manager.bat install` | Install kernel driver | Yes |
+| `driver_manager.bat start` | Start driver service | Yes |
+| `driver_manager.bat stop` | Stop driver service | Yes |
+| `driver_manager.bat uninstall` | Uninstall driver | Yes |
+| `driver_manager.bat status` | Check driver status | Yes |
+
+*Requires driver to be installed and running (which requires initial admin setup)
+
+## Uninstallation
+
+To completely remove SSAPT:
+
+1. **Disable blocking:**
+   ```cmd
+   ssapt.exe disable
+   ```
+
+2. **Stop the driver:**
+   ```cmd
+   driver_manager.bat stop
+   ```
+
+3. **Uninstall the driver:**
+   ```cmd
+   driver_manager.bat uninstall
+   ```
+
+4. **(Optional) Disable test signing:**
+   ```cmd
+   bcdedit /set testsigning off
+   ```
+
+5. **Reboot the system**
 
 ## Support
 
 For issues or questions, refer to:
-- Technical documentation: TECHNICAL.md
-- Build instructions: BUILD.md
-- Source code comments
+- **Build instructions:** BUILD.md
+- **Technical documentation:** TECHNICAL.md
+- **Security considerations:** SECURITY.md
+- **Architecture details:** ARCHITECTURE.md
