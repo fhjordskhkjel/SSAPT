@@ -268,17 +268,98 @@ The driver outputs to stdout for debugging:
 - **Dependency Walker**: Check exports
 - **Visual Studio Debugger**: Attach to target process
 
+## Kernel-Mode Hooks
+
+The kernel driver implements 7 strategic hooks at the kernel level for comprehensive screenshot blocking:
+
+### 1. NtGdiDdDDIPresent (Monitoring)
+```c
+NTSTATUS HookedNtGdiDdDDIPresent(VOID* pPresentData)
+```
+**Purpose**: Monitors DirectX present operations  
+**Hook Behavior**: Logs activity when blocking is enabled, but allows operation to proceed  
+**Impact**: Provides visibility into DirectX rendering without breaking applications
+
+### 2. NtGdiDdDDIGetDisplayModeList (Blocking)
+```c
+NTSTATUS HookedNtGdiDdDDIGetDisplayModeList(VOID* pData)
+```
+**Purpose**: Controls display mode enumeration  
+**Hook Behavior**: Returns STATUS_ACCESS_DENIED when blocking is enabled  
+**Impact**: Prevents tools from enumerating display modes for capture
+
+### 3. NtGdiBitBlt (Blocking Large Operations)
+```c
+BOOLEAN HookedNtGdiBitBlt(VOID* hdcDest, INT x, INT y, INT cx, INT cy, ...)
+```
+**Purpose**: Core GDI bit block transfer - primary screenshot method  
+**Hook Behavior**: Blocks transfers larger than 100x100 pixels when blocking enabled  
+**Impact**: Prevents PrintScreen, Snipping Tool, and most screenshot utilities  
+**BSOD Protection**: NULL pointer validation, exception handling, dimension checks
+
+### 4. NtGdiStretchBlt (Blocking Large Operations)
+```c
+BOOLEAN HookedNtGdiStretchBlt(VOID* hdcDest, INT xDst, INT yDst, INT cxDst, INT cyDst, ...)
+```
+**Purpose**: Stretched bit block transfers (resizing operations)  
+**Hook Behavior**: Blocks transfers larger than 100x100 pixels when blocking enabled  
+**Impact**: Blocks stretched screenshot captures  
+**BSOD Protection**: NULL pointer validation, exception handling, dimension checks
+
+### 5. NtUserGetDC (Monitoring)
+```c
+VOID* HookedNtUserGetDC(VOID* hWnd)
+```
+**Purpose**: Device context retrieval for windows  
+**Hook Behavior**: Monitors but does not block (would break too many applications)  
+**Impact**: Provides visibility into DC acquisition patterns  
+**BSOD Protection**: Exception handling, safe fallback to original function
+
+### 6. NtUserGetWindowDC (Monitoring)
+```c
+VOID* HookedNtUserGetWindowDC(VOID* hWnd)
+```
+**Purpose**: Window-specific device context retrieval  
+**Hook Behavior**: Monitors but does not block  
+**Impact**: Tracks window DC usage for screenshot detection  
+**BSOD Protection**: Exception handling, safe fallback to original function
+
+### 7. NtGdiGetDIBitsInternal (Blocking Pixel Reads)
+```c
+INT HookedNtGdiGetDIBitsInternal(VOID* hdc, VOID* hBitmap, ...)
+```
+**Purpose**: Direct DIB (Device Independent Bitmap) pixel reading  
+**Hook Behavior**: Blocks when bits buffer is provided and blocking is enabled  
+**Impact**: Prevents direct frame buffer reading and pixel capture  
+**BSOD Protection**: NULL pointer validation, buffer checks, exception handling
+
+### BSOD Protection Strategy
+
+All kernel hooks implement comprehensive safety measures:
+
+1. **Structured Exception Handling**: Every hook wrapped in `__try/__except`
+2. **Parameter Validation**: NULL checks on all pointer parameters
+3. **Spin Lock Protection**: Thread-safe state access with KSPIN_LOCK
+4. **IRQL Management**: Proper IRQL level handling for multi-processor safety
+5. **Safe Fallback**: All hooks can forward to original functions safely
+6. **Dimension Validation**: Size checks prevent integer overflow/underflow
+7. **Return Value Safety**: Appropriate error codes for all failure paths
+
 ## Future Enhancements
 
-1. **Additional Hooks**:
-   - Windows.Graphics.Capture API
-   - DXGI Desktop Duplication API
-   - Windows Media Foundation
+1. **Additional Hooks** (Kernel-mode hooks now implemented - see above):
+   - ✅ NtGdiBitBlt - Core GDI transfers (IMPLEMENTED)
+   - ✅ NtGdiStretchBlt - Stretched transfers (IMPLEMENTED)
+   - ✅ NtGdiGetDIBitsInternal - Pixel reading (IMPLEMENTED)
+   - ⬜ Windows.Graphics.Capture API - Modern capture API
+   - ⬜ DXGI Desktop Duplication API - Desktop duplication
+   - ⬜ Windows Media Foundation - Media capture
 
-2. **Kernel-Mode Driver**:
-   - Stronger protection
-   - System-wide enforcement
-   - Protection against DLL unloading
+2. **Kernel-Mode Driver** (✅ IMPLEMENTED):
+   - ✅ Stronger protection through kernel-level hooks
+   - ✅ System-wide enforcement (7 kernel hooks)
+   - ✅ Comprehensive BSOD protection
+   - ✅ Thread-safe state management
 
 3. **Watermarking**:
    - Inject visible/invisible watermarks

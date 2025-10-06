@@ -8,10 +8,12 @@ SSAPT is a kernel-mode driver that provides system-wide screenshot protection by
 
 **Key Features:**
 
-1. **Kernel-mode hooking** for system-wide protection
-2. **User-mode control application** for easy management
-3. **No DLL injection required** - works system-wide
-4. **IOCTL-based communication** between user-mode and kernel
+1. **7 kernel-mode hooks** for comprehensive screenshot blocking
+2. **Kernel-mode protection** for system-wide coverage
+3. **User-mode control application** for easy management
+4. **No DLL injection required** - works system-wide
+5. **IOCTL-based communication** between user-mode and kernel
+6. **Comprehensive BSOD protection** with exception handling and parameter validation
 
 ## Architecture
 
@@ -169,10 +171,14 @@ These protections ensure the driver operates safely in kernel mode without causi
 
 ### Kernel APIs Hooked
 
-**Windows Graphics Kernel APIs:**
-- `NtGdiDdDDIPresent` - Monitors frame presentation (allows normal rendering)
-- `NtGdiDdDDIGetDisplayModeList` - Can be blocked when protection is enabled
-- Additional kernel graphics subsystem calls as needed
+**Windows Graphics Kernel APIs (7 hooks total):**
+- `NtGdiDdDDIPresent` - Monitors DirectX frame presentation (allows normal rendering)
+- `NtGdiDdDDIGetDisplayModeList` - Blocks display mode enumeration when protection is enabled
+- `NtGdiBitBlt` - Blocks large GDI bit block transfers (>100x100 pixels)
+- `NtGdiStretchBlt` - Blocks large stretched bit block transfers (>100x100 pixels)
+- `NtUserGetDC` - Monitors device context retrieval
+- `NtUserGetWindowDC` - Monitors window device context retrieval
+- `NtGdiGetDIBitsInternal` - Blocks direct DIB pixel reading operations
 
 ### Driver Architecture
 

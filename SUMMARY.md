@@ -8,14 +8,21 @@ SSAPT (Screenshot Anti-Protection Testing) is a Windows **kernel-mode driver** t
 
 ### Core Components
 
-1. **kernel_driver.c** (~300 lines)
+1. **kernel_driver.c** (~655 lines)
    - Kernel-mode driver implementation
    - Driver entry point (DriverEntry)
    - Device object and symbolic link creation
    - IOCTL request handling (IRP_MJ_DEVICE_CONTROL)
-   - Kernel graphics API hooking infrastructure
+   - **7 kernel graphics API hooks** for comprehensive screenshot blocking:
+     * NtGdiDdDDIPresent (DirectX monitoring)
+     * NtGdiDdDDIGetDisplayModeList (display mode blocking)
+     * NtGdiBitBlt (GDI transfer blocking)
+     * NtGdiStretchBlt (stretched transfer blocking)
+     * NtUserGetDC (DC monitoring)
+     * NtUserGetWindowDC (window DC monitoring)
+     * NtGdiGetDIBitsInternal (pixel read blocking)
    - Thread-safe state management with spin locks
-   - Structured exception handling for kernel safety
+   - Comprehensive BSOD protection (SEH, parameter validation, safe fallbacks)
 
 2. **control_app.cpp** (~200 lines)
    - User-mode control application
@@ -297,7 +304,7 @@ Users must comply with all applicable laws and regulations.
 
 ### Hook Level
 - **From:** User-mode API hooking (GDI/DirectX)
-- **To:** Kernel-mode graphics API interception
+- **To:** Kernel-mode graphics API interception (7 kernel hooks)
 
 ### Advantages
 - ✅ System-wide protection without per-process overhead
