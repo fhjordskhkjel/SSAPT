@@ -40,9 +40,14 @@
 │  │                │                                     │   │
 │  │                ▼                                     │   │
 │  │  ┌──────────────────────────────────────────────┐   │   │
-│  │  │   Kernel Hook Interceptors                   │   │   │
-│  │  │   • NtGdiDdDDIPresent → Hooked               │   │   │
+│  │  │   Kernel Hook Interceptors (7 hooks)         │   │   │
+│  │  │   • NtGdiDdDDIPresent → Monitored            │   │   │
 │  │  │   • NtGdiDdDDIGetDisplayModeList → Blocked   │   │   │
+│  │  │   • NtGdiBitBlt → Blocked (large ops)        │   │   │
+│  │  │   • NtGdiStretchBlt → Blocked (large ops)    │   │   │
+│  │  │   • NtUserGetDC → Monitored                  │   │   │
+│  │  │   • NtUserGetWindowDC → Monitored            │   │   │
+│  │  │   • NtGdiGetDIBitsInternal → Blocked (reads) │   │   │
 │  │  └─────────────┬────────────────────────────────┘   │   │
 │  └────────────────┼──────────────────────────────────────┘   │
 │                   │                                          │
@@ -185,19 +190,32 @@ Display: "Status: ENABLED/DISABLED"
 ### Kernel Hook Flow
 
 ```
-Application calls graphics function
+Application calls graphics function (e.g., BitBlt)
     ↓
 Windows dispatches to win32k.sys
     ↓
-SSAPT hook intercepts NtGdiDdDDIPresent()
+SSAPT hook intercepts (e.g., HookedNtGdiBitBlt)
+    ↓
+Validate parameters (NULL checks)
     ↓
 Acquire spin lock (read)
     ↓
 Check BlockingEnabled flag
     ↓
-    ├─[if TRUE]─→ Log "Monitored" → Call original → Return
+Release spin lock
+    ↓
+    ├─[if TRUE and large op]─→ Log "Blocked" → Return FALSE
     │
-    └─[if FALSE]─→ Call original → Return
+    └─[if FALSE or small op]─→ Call original → Return result
+
+Note: 7 hooks now in place:
+  - NtGdiDdDDIPresent (monitoring)
+  - NtGdiDdDDIGetDisplayModeList (blocking)
+  - NtGdiBitBlt (blocking large transfers >100px)
+  - NtGdiStretchBlt (blocking large transfers >100px)
+  - NtUserGetDC (monitoring)
+  - NtUserGetWindowDC (monitoring)
+  - NtGdiGetDIBitsInternal (blocking pixel reads)
 ```
 
 ## Data Flow
