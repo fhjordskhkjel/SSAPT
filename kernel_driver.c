@@ -37,7 +37,7 @@
 //    - Best-effort cleanup even on exceptions
 //    - All original function pointers cleared on unhook
 //
-// 6. EXPANDED HOOK COVERAGE (7 hooks total)
+// 6. EXPANDED HOOK COVERAGE (10 hooks total)
 //    - NtGdiDdDDIPresent (DirectX present - monitoring)
 //    - NtGdiDdDDIGetDisplayModeList (Display modes - blocking)
 //    - NtGdiBitBlt (GDI bit block transfer - blocking large ops)
@@ -45,6 +45,9 @@
 //    - NtUserGetDC (Device context - monitoring)
 //    - NtUserGetWindowDC (Window DC - monitoring)
 //    - NtGdiGetDIBitsInternal (DIB pixel reading - blocking reads)
+//    - NtGdiCreateCompatibleDC (Compatible DC creation - monitoring)
+//    - NtGdiCreateCompatibleBitmap (Compatible bitmap creation - monitoring)
+//    - NtUserPrintWindow (Print window to bitmap - blocking)
 //
 // These protections ensure the driver operates safely in kernel mode without
 // causing system crashes (BSODs), even when faced with invalid parameters,
@@ -89,6 +92,9 @@ typedef BOOLEAN (*PFN_NtGdiStretchBlt)(VOID* hdcDest, INT xDst, INT yDst, INT cx
 typedef VOID* (*PFN_NtUserGetDC)(VOID* hWnd);
 typedef VOID* (*PFN_NtUserGetWindowDC)(VOID* hWnd);
 typedef INT (*PFN_NtGdiGetDIBitsInternal)(VOID* hdc, VOID* hBitmap, UINT uStartScan, UINT cScanLines, VOID* lpvBits, VOID* lpbmi, UINT uUsage, UINT cjMaxBits, UINT cjMaxInfo);
+typedef VOID* (*PFN_NtGdiCreateCompatibleDC)(VOID* hdc);
+typedef VOID* (*PFN_NtGdiCreateCompatibleBitmap)(VOID* hdc, INT cx, INT cy);
+typedef BOOLEAN (*PFN_NtUserPrintWindow)(VOID* hWnd, VOID* hdcBlt, UINT nFlags);
 
 // Original function pointers
 PFN_NtGdiDdDDIPresent g_OriginalNtGdiDdDDIPresent = NULL;
@@ -98,6 +104,9 @@ PFN_NtGdiStretchBlt g_OriginalNtGdiStretchBlt = NULL;
 PFN_NtUserGetDC g_OriginalNtUserGetDC = NULL;
 PFN_NtUserGetWindowDC g_OriginalNtUserGetWindowDC = NULL;
 PFN_NtGdiGetDIBitsInternal g_OriginalNtGdiGetDIBitsInternal = NULL;
+PFN_NtGdiCreateCompatibleDC g_OriginalNtGdiCreateCompatibleDC = NULL;
+PFN_NtGdiCreateCompatibleBitmap g_OriginalNtGdiCreateCompatibleBitmap = NULL;
+PFN_NtUserPrintWindow g_OriginalNtUserPrintWindow = NULL;
 
 // Hooked functions
 NTSTATUS HookedNtGdiDdDDIPresent(VOID* pPresentData) {
@@ -115,7 +124,7 @@ NTSTATUS HookedNtGdiDdDDIPresent(VOID* pPresentData) {
         KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
         
         if (shouldBlock) {
-            KdPrint(("[SSAPT] Monitored NtGdiDdDDIPresent call\n"));
+            KdPrint(("[SSAPT] NtGdiDdDDIPresent: Monitored DirectX present call (allowed)\n"));
         }
         
         // Allow present calls (just monitoring)
@@ -146,9 +155,11 @@ NTSTATUS HookedNtGdiDdDDIGetDisplayModeList(VOID* pData) {
         KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
         
         if (shouldBlock) {
-            KdPrint(("[SSAPT] Blocked GetDisplayModeList call\n"));
+            KdPrint(("[SSAPT] NtGdiDdDDIGetDisplayModeList: BLOCKED display mode enumeration\n"));
             return STATUS_ACCESS_DENIED;
         }
+        
+        KdPrint(("[SSAPT] NtGdiDdDDIGetDisplayModeList: Allowed display mode enumeration\n"));
         
         if (g_OriginalNtGdiDdDDIGetDisplayModeList) {
             return g_OriginalNtGdiDdDDIGetDisplayModeList(pData);
@@ -179,8 +190,12 @@ BOOLEAN HookedNtGdiBitBlt(VOID* hdcDest, INT x, INT y, INT cx, INT cy, VOID* hdc
         KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
         
         if (shouldBlock && (cx > 100 || cy > 100)) {
-            KdPrint(("[SSAPT] Blocked NtGdiBitBlt call (size: %dx%d)\n", cx, cy));
+            KdPrint(("[SSAPT] NtGdiBitBlt: BLOCKED screenshot attempt (size: %dx%d)\n", cx, cy));
             return FALSE;
+        }
+        
+        if (shouldBlock) {
+            KdPrint(("[SSAPT] NtGdiBitBlt: Allowed small transfer (size: %dx%d)\n", cx, cy));
         }
         
         if (g_OriginalNtGdiBitBlt) {
@@ -210,8 +225,12 @@ BOOLEAN HookedNtGdiStretchBlt(VOID* hdcDest, INT xDst, INT yDst, INT cxDst, INT 
         KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
         
         if (shouldBlock && (cxDst > 100 || cyDst > 100)) {
-            KdPrint(("[SSAPT] Blocked NtGdiStretchBlt call (size: %dx%d)\n", cxDst, cyDst));
+            KdPrint(("[SSAPT] NtGdiStretchBlt: BLOCKED screenshot attempt (size: %dx%d)\n", cxDst, cyDst));
             return FALSE;
+        }
+        
+        if (shouldBlock) {
+            KdPrint(("[SSAPT] NtGdiStretchBlt: Allowed small transfer (size: %dx%d)\n", cxDst, cyDst));
         }
         
         if (g_OriginalNtGdiStretchBlt) {
@@ -236,7 +255,7 @@ VOID* HookedNtUserGetDC(VOID* hWnd) {
         KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
         
         if (shouldBlock) {
-            KdPrint(("[SSAPT] Monitored NtUserGetDC call\n"));
+            KdPrint(("[SSAPT] NtUserGetDC: Monitored DC retrieval (allowed)\n"));
             // Don't block DC retrieval entirely - would break apps
             // Just monitor for now
         }
@@ -263,7 +282,7 @@ VOID* HookedNtUserGetWindowDC(VOID* hWnd) {
         KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
         
         if (shouldBlock) {
-            KdPrint(("[SSAPT] Monitored NtUserGetWindowDC call\n"));
+            KdPrint(("[SSAPT] NtUserGetWindowDC: Monitored window DC retrieval (allowed)\n"));
             // Don't block DC retrieval entirely - would break apps
             // Just monitor for now
         }
@@ -296,8 +315,12 @@ INT HookedNtGdiGetDIBitsInternal(VOID* hdc, VOID* hBitmap, UINT uStartScan, UINT
         
         if (shouldBlock && lpvBits != NULL) {
             // If bits buffer is provided, they're trying to read pixels
-            KdPrint(("[SSAPT] Blocked NtGdiGetDIBitsInternal call (pixel read attempt)\n"));
+            KdPrint(("[SSAPT] NtGdiGetDIBitsInternal: BLOCKED pixel read attempt (lines: %d)\n", cScanLines));
             return 0;
+        }
+        
+        if (shouldBlock) {
+            KdPrint(("[SSAPT] NtGdiGetDIBitsInternal: Allowed info-only query\n"));
         }
         
         if (g_OriginalNtGdiGetDIBitsInternal) {
@@ -309,6 +332,98 @@ INT HookedNtGdiGetDIBitsInternal(VOID* hdc, VOID* hBitmap, UINT uStartScan, UINT
     __except(EXCEPTION_EXECUTE_HANDLER) {
         KdPrint(("[SSAPT] Exception in HookedNtGdiGetDIBitsInternal: 0x%X\n", GetExceptionCode()));
         return 0;
+    }
+}
+
+VOID* HookedNtGdiCreateCompatibleDC(VOID* hdc) {
+    KIRQL oldIrql;
+    BOOLEAN shouldBlock;
+    
+    __try {
+        KeAcquireSpinLock(&g_Globals.StateLock, &oldIrql);
+        shouldBlock = g_Globals.BlockingEnabled;
+        KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
+        
+        if (shouldBlock) {
+            KdPrint(("[SSAPT] NtGdiCreateCompatibleDC: Monitored compatible DC creation (allowed)\n"));
+            // Don't block DC creation - would break apps
+            // Just monitor for screenshot pattern detection
+        }
+        
+        if (g_OriginalNtGdiCreateCompatibleDC) {
+            return g_OriginalNtGdiCreateCompatibleDC(hdc);
+        }
+        
+        return NULL;
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+        KdPrint(("[SSAPT] Exception in HookedNtGdiCreateCompatibleDC: 0x%X\n", GetExceptionCode()));
+        return NULL;
+    }
+}
+
+VOID* HookedNtGdiCreateCompatibleBitmap(VOID* hdc, INT cx, INT cy) {
+    KIRQL oldIrql;
+    BOOLEAN shouldBlock;
+    
+    __try {
+        // Validate parameter
+        if (!hdc) {
+            return NULL;
+        }
+        
+        KeAcquireSpinLock(&g_Globals.StateLock, &oldIrql);
+        shouldBlock = g_Globals.BlockingEnabled;
+        KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
+        
+        if (shouldBlock) {
+            KdPrint(("[SSAPT] NtGdiCreateCompatibleBitmap: Monitored bitmap creation (size: %dx%d, allowed)\n", cx, cy));
+            // Don't block bitmap creation - would break apps
+            // Just monitor for screenshot pattern detection
+        }
+        
+        if (g_OriginalNtGdiCreateCompatibleBitmap) {
+            return g_OriginalNtGdiCreateCompatibleBitmap(hdc, cx, cy);
+        }
+        
+        return NULL;
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+        KdPrint(("[SSAPT] Exception in HookedNtGdiCreateCompatibleBitmap: 0x%X\n", GetExceptionCode()));
+        return NULL;
+    }
+}
+
+BOOLEAN HookedNtUserPrintWindow(VOID* hWnd, VOID* hdcBlt, UINT nFlags) {
+    KIRQL oldIrql;
+    BOOLEAN shouldBlock;
+    
+    __try {
+        // Validate parameters
+        if (!hWnd || !hdcBlt) {
+            return FALSE;
+        }
+        
+        KeAcquireSpinLock(&g_Globals.StateLock, &oldIrql);
+        shouldBlock = g_Globals.BlockingEnabled;
+        KeReleaseSpinLock(&g_Globals.StateLock, oldIrql);
+        
+        if (shouldBlock) {
+            KdPrint(("[SSAPT] NtUserPrintWindow: BLOCKED window screenshot attempt (flags: 0x%X)\n", nFlags));
+            return FALSE;
+        }
+        
+        KdPrint(("[SSAPT] NtUserPrintWindow: Allowed window print (flags: 0x%X)\n", nFlags));
+        
+        if (g_OriginalNtUserPrintWindow) {
+            return g_OriginalNtUserPrintWindow(hWnd, hdcBlt, nFlags);
+        }
+        
+        return TRUE;
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+        KdPrint(("[SSAPT] Exception in HookedNtUserPrintWindow: 0x%X\n", GetExceptionCode()));
+        return FALSE;
     }
 }
 
@@ -333,6 +448,9 @@ NTSTATUS InitializeHooks(VOID) {
         // - NtUserGetDC (Device context retrieval)
         // - NtUserGetWindowDC (Window device context retrieval)
         // - NtGdiGetDIBitsInternal (Direct DIB pixel reading)
+        // - NtGdiCreateCompatibleDC (Compatible DC creation - monitoring)
+        // - NtGdiCreateCompatibleBitmap (Compatible bitmap creation - monitoring)
+        // - NtUserPrintWindow (Print window to bitmap - blocking)
         //
         // BSOD Protection implemented:
         // - All hooks wrapped in __try/__except
@@ -341,7 +459,7 @@ NTSTATUS InitializeHooks(VOID) {
         // - Safe fallback to original functions
         // - NULL pointer checks throughout
         
-        KdPrint(("[SSAPT] Kernel hooks initialized (7 hooks ready)\n"));
+        KdPrint(("[SSAPT] Kernel hooks initialized (10 hooks ready)\n"));
         KdPrint(("[SSAPT]   - NtGdiDdDDIPresent (monitoring)\n"));
         KdPrint(("[SSAPT]   - NtGdiDdDDIGetDisplayModeList (blocking)\n"));
         KdPrint(("[SSAPT]   - NtGdiBitBlt (blocking large transfers)\n"));
@@ -349,6 +467,9 @@ NTSTATUS InitializeHooks(VOID) {
         KdPrint(("[SSAPT]   - NtUserGetDC (monitoring)\n"));
         KdPrint(("[SSAPT]   - NtUserGetWindowDC (monitoring)\n"));
         KdPrint(("[SSAPT]   - NtGdiGetDIBitsInternal (blocking pixel reads)\n"));
+        KdPrint(("[SSAPT]   - NtGdiCreateCompatibleDC (monitoring)\n"));
+        KdPrint(("[SSAPT]   - NtGdiCreateCompatibleBitmap (monitoring)\n"));
+        KdPrint(("[SSAPT]   - NtUserPrintWindow (blocking)\n"));
         
         return STATUS_SUCCESS;
     }
@@ -373,6 +494,9 @@ VOID RemoveHooks(VOID) {
         // - NtUserGetDC
         // - NtUserGetWindowDC
         // - NtGdiGetDIBitsInternal
+        // - NtGdiCreateCompatibleDC
+        // - NtGdiCreateCompatibleBitmap
+        // - NtUserPrintWindow
         
         // Clear function pointers to prevent use after unhook
         g_OriginalNtGdiDdDDIPresent = NULL;
@@ -382,8 +506,11 @@ VOID RemoveHooks(VOID) {
         g_OriginalNtUserGetDC = NULL;
         g_OriginalNtUserGetWindowDC = NULL;
         g_OriginalNtGdiGetDIBitsInternal = NULL;
+        g_OriginalNtGdiCreateCompatibleDC = NULL;
+        g_OriginalNtGdiCreateCompatibleBitmap = NULL;
+        g_OriginalNtUserPrintWindow = NULL;
         
-        KdPrint(("[SSAPT] Kernel hooks removed (7 hooks uninstalled)\n"));
+        KdPrint(("[SSAPT] Kernel hooks removed (10 hooks uninstalled)\n"));
     }
     __except(EXCEPTION_EXECUTE_HANDLER) {
         KdPrint(("[SSAPT] Exception in RemoveHooks: 0x%X\n", GetExceptionCode()));

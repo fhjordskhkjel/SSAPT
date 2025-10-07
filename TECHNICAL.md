@@ -270,7 +270,7 @@ The driver outputs to stdout for debugging:
 
 ## Kernel-Mode Hooks
 
-The kernel driver implements 7 strategic hooks at the kernel level for comprehensive screenshot blocking:
+The kernel driver implements 10 strategic hooks at the kernel level for comprehensive screenshot blocking:
 
 ### 1. NtGdiDdDDIPresent (Monitoring)
 ```c
@@ -332,6 +332,33 @@ INT HookedNtGdiGetDIBitsInternal(VOID* hdc, VOID* hBitmap, ...)
 **Hook Behavior**: Blocks when bits buffer is provided and blocking is enabled  
 **Impact**: Prevents direct frame buffer reading and pixel capture  
 **BSOD Protection**: NULL pointer validation, buffer checks, exception handling
+
+### 8. NtGdiCreateCompatibleDC (Monitoring)
+```c
+VOID* HookedNtGdiCreateCompatibleDC(VOID* hdc)
+```
+**Purpose**: Compatible device context creation  
+**Hook Behavior**: Monitors but does not block (would break many applications)  
+**Impact**: Tracks DC creation patterns commonly used in screenshot workflows  
+**BSOD Protection**: Exception handling, safe fallback to original function
+
+### 9. NtGdiCreateCompatibleBitmap (Monitoring)
+```c
+VOID* HookedNtGdiCreateCompatibleBitmap(VOID* hdc, INT cx, INT cy)
+```
+**Purpose**: Compatible bitmap creation for memory operations  
+**Hook Behavior**: Monitors bitmap creation with size information, does not block  
+**Impact**: Provides visibility into bitmap allocation patterns for screenshot detection  
+**BSOD Protection**: NULL pointer validation, exception handling, dimension logging
+
+### 10. NtUserPrintWindow (Blocking)
+```c
+BOOLEAN HookedNtUserPrintWindow(VOID* hWnd, VOID* hdcBlt, UINT nFlags)
+```
+**Purpose**: Print window contents to a bitmap (commonly used for window screenshots)  
+**Hook Behavior**: Blocks operation and returns FALSE when blocking is enabled  
+**Impact**: Prevents PrintWindow API-based screenshot utilities  
+**BSOD Protection**: NULL pointer validation, exception handling, safe error return
 
 ### BSOD Protection Strategy
 
