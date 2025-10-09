@@ -97,11 +97,26 @@ ssapt.exe status
 
 ### Kernel-Mode Hooking
 
-The kernel driver intercepts graphics-related system calls at the kernel level:
+The kernel driver uses **SSDT (System Service Descriptor Table) hooking** to intercept graphics-related system calls at the kernel level:
 
-- **NtGdiDdDDIPresent**: Monitors frame presentation (allows normal rendering)
-- **NtGdiDdDDIGetDisplayModeList**: Can be blocked when protection is enabled
-- Additional kernel graphics APIs as needed
+**SSDT Hooking Process:**
+1. Locates the System Service Descriptor Table in kernel memory
+2. Disables memory write protection (CR0 register manipulation)
+3. Replaces function pointers in SSDT with custom hook functions
+4. Re-enables write protection
+5. Forwards calls to original functions when appropriate
+
+**Target Functions:**
+- **NtGdiBitBlt**: GDI bit block transfers (main screenshot method)
+- **NtGdiStretchBlt**: Stretched bit block transfers
+- **NtGdiGetDIBitsInternal**: Direct DIB pixel reading
+- **NtUserGetDC/NtUserGetWindowDC**: Device context retrieval (monitoring)
+- **NtGdiCreateCompatibleDC/Bitmap**: Compatible DC/bitmap creation (monitoring)
+- **NtUserPrintWindow**: Print window to bitmap
+- **NtGdiDdDDIPresent**: DirectX frame presentation (monitoring)
+- **NtGdiDdDDIGetDisplayModeList**: Display mode enumeration
+
+See [SSDT_IMPLEMENTATION.md](SSDT_IMPLEMENTATION.md) for detailed technical information about the SSDT hooking implementation.
 
 ### Communication Architecture
 

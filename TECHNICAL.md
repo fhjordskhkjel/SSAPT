@@ -270,6 +270,29 @@ The driver outputs to stdout for debugging:
 
 ## Kernel-Mode Hooks
 
+### SSDT Hooking Implementation
+
+The kernel driver uses **SSDT (System Service Descriptor Table) hooking** to intercept system calls at the deepest kernel level. This provides more comprehensive protection than traditional IAT or inline hooking.
+
+**SSDT Hooking Process:**
+
+1. **Locate SSDT**: Access KeServiceDescriptorTable exported by ntoskrnl.exe
+2. **Disable Write Protection**: Clear CR0 register WP bit (bit 16)
+3. **Replace Function Pointer**: Modify SSDT entry to point to hook function
+4. **Enable Write Protection**: Restore CR0 register WP bit
+5. **Forward Calls**: Hook function validates and forwards to original
+
+**Key Functions:**
+- `DisableWriteProtection()` / `EnableWriteProtection()` - CR0 manipulation
+- `GetSSDTFunctionAddress()` - Resolve function from service index
+- `SetSSDTHook()` - Install SSDT hook with validation
+- `InitializeHooks()` - Install all hooks with error handling
+- `RemoveHooks()` - Restore original SSDT entries
+
+See [SSDT_IMPLEMENTATION.md](SSDT_IMPLEMENTATION.md) for complete technical details.
+
+### Hook Functions
+
 The kernel driver implements 10 strategic hooks at the kernel level for comprehensive screenshot blocking:
 
 ### 1. NtGdiDdDDIPresent (Monitoring)

@@ -1,8 +1,58 @@
-# SSAPT Driver Hook Enhancement - Change Summary
+# SSAPT Driver Changes
 
-## Overview
+## Latest Update: SSDT Hooking Implementation
 
-This update adds 5 additional kernel driver hooks to the SSAPT screenshot blocking system, increasing the total from 2 to 7 hooks, and includes comprehensive BSOD protection for all hooks.
+### Overview
+Implemented actual SSDT (System Service Descriptor Table) hooking to replace placeholder code. The driver now performs real kernel-level system call interception using SSDT modification.
+
+### What Changed
+- ✅ Added SSDT structure definitions and external references
+- ✅ Implemented CR0 register manipulation for write protection control
+- ✅ Added SSDT function address resolution
+- ✅ Implemented actual SSDT hook installation (SetSSDTHook)
+- ✅ Updated InitializeHooks to perform real SSDT modifications
+- ✅ Updated RemoveHooks to restore original SSDT entries
+- ✅ Added comprehensive safety checks and exception handling
+- ✅ Added service index configuration system
+- ✅ Created detailed SSDT implementation documentation
+
+### Technical Details
+**New Functions:**
+- `DisableWriteProtection()` - Clears CR0 WP bit for SSDT modification
+- `EnableWriteProtection()` - Restores CR0 WP bit after modification
+- `GetSSDTFunctionAddress()` - Resolves function address from service index
+- `SetSSDTHook()` - Replaces SSDT entry with hook function
+
+**Line Changes:** ~783 lines → 1119 lines (+336 lines)
+
+### Service Index Configuration
+The implementation includes service index variables for 8 target functions:
+- NtGdiBitBlt
+- NtGdiStretchBlt  
+- NtUserGetDC
+- NtUserGetWindowDC
+- NtGdiGetDIBitsInternal
+- NtGdiCreateCompatibleDC
+- NtGdiCreateCompatibleBitmap
+- NtUserPrintWindow
+
+**Note:** Service indexes default to 0 and must be configured for specific Windows versions. See [SSDT_IMPLEMENTATION.md](SSDT_IMPLEMENTATION.md) for configuration guide.
+
+### Safety Features
+- All SSDT operations wrapped in SEH (Structured Exception Handling)
+- Service index bounds checking
+- SSDT structure validation before modification
+- Write protection always restored on exit
+- Original function pointers preserved for restoration
+- Graceful degradation if hooks fail to install
+
+---
+
+## Previous Update: Driver Hook Enhancement
+
+### Overview
+
+This update added 5 additional kernel driver hooks to the SSAPT screenshot blocking system, increasing the total from 2 to 7 hooks, and includes comprehensive BSOD protection for all hooks.
 
 ## Changes Made
 
